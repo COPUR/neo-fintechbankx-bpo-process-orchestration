@@ -38,7 +38,8 @@ repos to keep `io.camunda` out (`docs/proposals/archunit-no-camunda.md`).
 
 ## First process: P1 TPP account opening
 
-`acc-tpp-account-opening` verifies KYC (waiting up to seven days for a pending one), screens the
+`acc-tpp-account-opening` verifies KYC (waiting up to seven days for a pending one, then reading the status from cus again;
+the completion message only wakes the instance), screens the
 applicant, sends a REVIEW result to `lib-screening-review` (routed by `cmp-review-routing`, with an
 analyst task, an escalation task and SLA timers), opens the account exactly once (`acc.open-account`
 is the pivot; a lost response is retried with the same idempotency key), offers a Kolay Adres alias
@@ -48,7 +49,8 @@ in Türkiye, and notifies the applicant. Every rejection path closes the applica
 
 ```
 npm ci --prefix lint && npm test --prefix lint && npm run lint --prefix lint
-./gradlew check            # needs Docker for tests/cpt (camunda/camunda:8.10.4)
+./gradlew check            # needs Docker for tests/cpt (camunda/camunda:8.10.4); the tests run the
+                           # workers under the simulator profile, the only one with a fixed token
 bash scripts/ci/check-catalog-pins.sh
 bash scripts/ci/camunda-chart-render.sh   # needs helm 3.19+
 ```

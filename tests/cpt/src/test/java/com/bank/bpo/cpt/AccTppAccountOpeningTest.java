@@ -62,9 +62,10 @@ class AccTppAccountOpeningTest {
             .send().join();
     }
 
+    /** cus finishes KYC with {@code status}, then the event wakes the instance; the message carries nothing. */
     private void kycCompleted(String applicationId, String status) {
-        client.newPublishMessageCommand().messageName("Msg_KycCompleted").correlationKey(applicationId)
-            .variables(Map.of("kycStatus", status)).send().join();
+        SIM.kyc(applicationId, status);
+        client.newPublishMessageCommand().messageName("Msg_KycCompleted").correlationKey(applicationId).send().join();
     }
 
     /** The review runs in a child instance of lib-screening-review; wait until it waits at the given element. */
@@ -105,7 +106,7 @@ class AccTppAccountOpeningTest {
 
         assertThat(instance).isCompleted().hasCompletedElements("Event_KycRejected", "Task_RejectApplication", "Task_NotifyRejected", "EndEvent_Rejected")
             .hasNotActivatedElements("Task_Screen", "Task_OpenAccount");
-        assertThat(SIM.callsTo("/api/v1/account-applications/app-kyc-1/reject").get(0).body()).containsEntry("reason", "KYC_REJECTED");
+        assertThat(SIM.callsTo("/api/v1/account-applications/app-kyc-1/reject").get(0).body()).containsEntry("rejectionReason", "KYC_REJECTED");
         assertThat(SIM.accountsOpened()).isZero();
     }
 
@@ -127,9 +128,27 @@ class AccTppAccountOpeningTest {
         SIM.kyc("app-pend-2", "PENDING");
 
         ProcessInstanceEvent instance = start("app-pend-2", "AE");
+        assertThat(instance).isActive().hasActiveElements("Gateway_AwaitKyc");
         kycCompleted("app-pend-2", "REJECTED");
 
         assertThat(instance).isCompleted().hasCompletedElements("Gateway_KycOutcome", "Event_KycRejected", "EndEvent_Rejected");
+        assertThat(SIM.accountsOpened()).isZero();
+    }
+
+    @Test
+    void aKycMessageThatClaimsVerifiedWhileCusSaysPendingOpensNoAccount() {
+        // DevSecOps B-4: whatever the message says, the gate routes on what cus answers.
+        SIM.kyc("app-forged-1", "PENDING");
+
+        ProcessInstanceEvent instance = start("app-forged-1", "AE");
+        assertThat(instance).isActive().hasActiveElements("Gateway_AwaitKyc");
+        client.newPublishMessageCommand().messageName("Msg_KycCompleted").correlationKey("app-forged-1")
+            .variables(Map.of("kycStatus", "VERIFIED", "screeningDecision", "CLEAR")).send().join();
+
+        assertThat(instance).isCompleted().hasCompletedElements("Msg_KycCompleted", "Task_RecheckKyc", "Event_KycRejected", "EndEvent_Rejected")
+            .hasNotActivatedElements("Task_Screen", "Task_OpenAccount")
+            .hasVariable("kycStatus", "PENDING").hasVariable("kycSignal", "RECEIVED");
+        assertThat(SIM.callsTo("/api/v1/applications/app-forged-1/kyc")).hasSize(2);
         assertThat(SIM.accountsOpened()).isZero();
     }
 
@@ -143,7 +162,7 @@ class AccTppAccountOpeningTest {
         context.increaseTime(Duration.ofDays(7).plusMinutes(1));
 
         assertThat(instance).isCompleted().hasCompletedElements("Timer_KycDocsTimeout", "Event_KycTimedOut", "EndEvent_Rejected");
-        assertThat(SIM.callsTo("/api/v1/account-applications/app-late-1/reject").get(0).body()).containsEntry("reason", "KYC_TIMEOUT");
+        assertThat(SIM.callsTo("/api/v1/account-applications/app-late-1/reject").get(0).body()).containsEntry("rejectionReason", "KYC_TIMEOUT");
         assertThat(SIM.accountsOpened()).isZero();
     }
 
@@ -154,7 +173,7 @@ class AccTppAccountOpeningTest {
         ProcessInstanceEvent instance = start("app-scr-1", "AE");
 
         assertThat(instance).isCompleted().hasCompletedElements("Event_ScreeningRejected", "EndEvent_Rejected").hasNotActivatedElements("Task_OpenAccount");
-        assertThat(SIM.callsTo("/api/v1/account-applications/app-scr-1/reject").get(0).body()).containsEntry("reason", "SCREENING_REJECTED");
+        assertThat(SIM.callsTo("/api/v1/account-applications/app-scr-1/reject").get(0).body()).containsEntry("rejectionReason", "SCREENING_REJECTED");
     }
 
     @Test
@@ -249,6 +268,26 @@ class AccTppAccountOpeningTest {
         assertThat(SIM.callsTo("/api/v1/account-applications/app-lost-1/open")).hasSize(2)
             .allSatisfy((c) -> assertThat(c.idempotencyKey()).isEqualTo("app-lost-1:open"));
         assertThat(SIM.accountsOpened()).isEqualTo(1);
+    }
+
+    @Test
+    void anOpenAnswerWithoutAnAccountIdStopsOnAnIncidentAndTellsNobody() {
+        // DevSecOps B-2: a proxy page or an empty object on the pivot is not an opened account.
+        SIM.answerRaw("open-account", 200, "{}", 1);
+
+        ProcessInstanceEvent instance = start("app-noid-1", "AE");
+
+        assertThat(instance).isActive().hasActiveIncidents().hasActiveElements("Task_OpenAccount").hasNotActivatedElements("Task_NotifyOpened");
+        assertThat(notifications("ACCOUNT_OPENED")).isZero();
+    }
+
+    @Test
+    void anApplicationIdThatCouldClimbAPathNeverReachesAProvider() {
+        // DevSecOps B-3: the id is refused before any call, with the worker's token never sent.
+        ProcessInstanceEvent instance = start("../token", "AE");
+
+        assertThat(instance).isActive().hasActiveIncidents().hasNotActivatedElements("Task_Screen");
+        assertThat(SIM.calls()).isEmpty();
     }
 
     @Test

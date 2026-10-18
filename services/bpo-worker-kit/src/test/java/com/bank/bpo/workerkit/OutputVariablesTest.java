@@ -34,8 +34,12 @@ class OutputVariablesTest {
 
     @Test
     void aResultOverEightKilobytesIsRefused() {
-        assertThatThrownBy(() -> OutputVariables.of(Set.of("caseId"), Map.of("caseId", "x".repeat(9000))))
-            .hasMessageContaining("8192");
+        java.util.Map<String, Object> many = new java.util.LinkedHashMap<>();
+        for (int n = 0; n < 150; n++) {
+            many.put("v" + n, "x".repeat(60));
+        }
+        assertThatThrownBy(() -> OutputVariables.of(many.keySet(), many))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("bytes");
     }
 
     @Test
@@ -44,5 +48,15 @@ class OutputVariablesTest {
         Matcher m = Pattern.compile("FORBIDDEN_NAME = /(.*)/i;").matcher(js);
         assertThat(m.find()).isTrue();
         assertThat(OutputVariables.FORBIDDEN.pattern()).isEqualTo(m.group(1));
+    }
+
+    @Test
+    void aValueThatIsNotAPlainIdOrEnumIsRefused() {
+        for (Object bad : new Object[] {"null value with spaces", "../x", "a.b@c", 12.5, java.util.List.of("x")}) {
+            assertThatThrownBy(() -> OutputVariables.of(Set.of("accountId"), java.util.Collections.singletonMap("accountId", bad)))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("not an id");
+        }
+        assertThatThrownBy(() -> OutputVariables.of(Set.of("accountId"), java.util.Collections.singletonMap("accountId", null)))
+            .isInstanceOf(IllegalStateException.class);
     }
 }

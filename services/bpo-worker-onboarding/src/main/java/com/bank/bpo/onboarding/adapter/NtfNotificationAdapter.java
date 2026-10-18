@@ -1,11 +1,15 @@
 package com.bank.bpo.onboarding.adapter;
 
 import com.bank.bpo.onboarding.port.NotificationPort;
+import com.bank.bpo.workerkit.Ids;
 import com.bank.bpo.workerkit.ProviderHttp;
 import java.util.Map;
+import java.util.Set;
 
+/** ntf POST /api/v1/notifications (contracts/expectations/ntf.yaml): the subject and the purpose, never an address. */
 public final class NtfNotificationAdapter implements NotificationPort {
 
+    private static final Set<String> PURPOSES = Set.of("ACCOUNT_OPENED", "ACCOUNT_APPLICATION_REJECTED");
     private final ProviderHttp http;
 
     public NtfNotificationAdapter(ProviderHttp http) {
@@ -13,8 +17,9 @@ public final class NtfNotificationAdapter implements NotificationPort {
     }
 
     @Override
-    public String notify(String applicationId, String purpose, String idempotencyKey) {
-        return String.valueOf(http.post("/api/v1/notifications",
-            Map.of("applicationId", applicationId, "purpose", purpose), idempotencyKey).get("notificationRef"));
+    public String notify(String subjectRef, String purpose, String idempotencyKey) {
+        Map<String, Object> request = Map.of("subjectRef", Ids.require("subjectRef", subjectRef),
+            "purpose", Ids.oneOf("purpose", purpose, PURPOSES));
+        return Ids.require("notificationRef", http.post("/api/v1/notifications", request, idempotencyKey).get("notificationRef"));
     }
 }

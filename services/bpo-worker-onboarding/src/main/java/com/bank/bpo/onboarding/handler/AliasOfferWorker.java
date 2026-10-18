@@ -23,7 +23,7 @@ public class AliasOfferWorker {
 
     @JobWorker(type = "psg-tr.alias-offer", fetchVariables = {"applicationId", "accountId"})
     public Map<String, Object> handle(@Variable String applicationId, @Variable String accountId) {
-        return JobErrors.guard(() -> OutputVariables.of(OUTPUTS,
-            Map.of("aliasOfferStatus", aliases.offer(accountId, IdempotencyKeys.of(applicationId, "alias-offer")))));
+        return JobErrors.guard(applicationId, () -> OutputVariables.of(OUTPUTS,
+            Map.of("aliasOfferStatus", aliases.offer(applicationId, accountId, IdempotencyKeys.of(applicationId, "alias-offer")))));
     }
 }

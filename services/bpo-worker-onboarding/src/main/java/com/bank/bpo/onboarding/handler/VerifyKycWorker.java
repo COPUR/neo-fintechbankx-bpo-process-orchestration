@@ -22,6 +22,6 @@ public class VerifyKycWorker {
 
     @JobWorker(type = "cus.verify-kyc", fetchVariables = {"applicationId"})
     public Map<String, Object> handle(@Variable String applicationId) {
-        return JobErrors.guard(() -> OutputVariables.of(OUTPUTS, Map.of("kycStatus", kyc.statusOf(applicationId).name())));
+        return JobErrors.guard(applicationId, () -> OutputVariables.of(OUTPUTS, Map.of("kycStatus", kyc.statusOf(applicationId).name())));
     }
 }

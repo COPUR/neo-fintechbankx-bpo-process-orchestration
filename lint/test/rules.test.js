@@ -170,3 +170,16 @@ test('dmn: the shipped decision is clean and each DMN rule fires', async () => {
   assert.match(await messages({ input: 'amount * 2' }), /not a plain variable name/);
   assert.match(await messages({ tag: false }), /no version tag/);
 });
+
+test('message-no-merge: a message wait must map constants only, never the payload', async () => {
+  const roots = '<bpmn:message id="Message_T" name="Msg_T"><bpmn:extensionElements><zeebe:subscription correlationKey="=applicationId" /></bpmn:extensionElements></bpmn:message>';
+  const wait = (mapping) => `<bpmn:intermediateCatchEvent id="Msg_T">${mapping}
+      <bpmn:incoming>Flow_In</bpmn:incoming><bpmn:outgoing>Flow_Out</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Med_T" messageRef="Message_T" /></bpmn:intermediateCatchEvent>
+    <bpmn:sequenceFlow id="Flow_In" sourceRef="StartEvent_T" targetRef="Msg_T" />
+    <bpmn:sequenceFlow id="Flow_Out" sourceRef="Msg_T" targetRef="EndEvent_T" />`;
+  const out = (source) => `<bpmn:extensionElements><zeebe:ioMapping><zeebe:output source="${source}" target="kycSignal" /></zeebe:ioMapping></bpmn:extensionElements>`;
+  assert.match((await fbx(model(wait(''), { roots }), 'message-no-merge'))[0], /payload is merged/);
+  assert.match((await fbx(model(wait(out('=kycStatus')), { roots }), 'message-no-merge'))[0], /reads the payload/);
+  assert.deepStrictEqual(await fbx(model(wait(out('=&#34;RECEIVED&#34;')), { roots }), 'message-no-merge'), []);
+});

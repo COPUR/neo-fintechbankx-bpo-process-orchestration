@@ -1,5 +1,6 @@
 provider: psg-tr
 service: payment rail gateway for Türkiye (not created yet, phase 5 wave D5.3)
+audience: none yet (no client)   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
 operations:
   offerKolayAdresAlias:
     status: requested

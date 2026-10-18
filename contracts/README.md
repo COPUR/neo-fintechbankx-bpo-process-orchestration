@@ -11,6 +11,10 @@ were built against.
 - `pins/catalog-pins.lock`: one line per pinned operation:
   `<provider> <operationId> <catalog repo> <commit>`.
 
+Every call sends `Authorization: Bearer` (audience per provider, see `docs/identity-requests.md`),
+`x-fapi-interaction-id` (one per business key) and, on commands, `x-idempotency-key`. Workers refuse
+an answer without its required fields as a contract fault.
+
 `scripts/ci/check-catalog-pins.sh` refuses a job type whose provider operation has no expectation,
 an expectation marked pinned without a pin line, and a pin line without an expectation.
 When an operation moves to `pinned`, its job type in `models/dictionary/job-types.yaml` changes

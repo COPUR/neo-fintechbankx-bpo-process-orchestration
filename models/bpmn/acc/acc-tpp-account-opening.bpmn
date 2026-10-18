@@ -43,11 +43,26 @@
       <bpmn:outgoing>Flow_ToKycCompleted</bpmn:outgoing>
       <bpmn:outgoing>Flow_ToKycDocsTimeout</bpmn:outgoing>
     </bpmn:eventBasedGateway>
+    <!-- The message only wakes the instance (DevSecOps B-4). Its output mapping replaces the default merge of
+         message variables, so nothing a publisher sends reaches the process; the KYC status is read again from
+         cus by Task_RecheckKyc and the gateway routes on that answer only. -->
     <bpmn:intermediateCatchEvent id="Msg_KycCompleted" name="KYC completed">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=&#34;RECEIVED&#34;" target="kycSignal" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_ToKycCompleted</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToKycOutcome</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToRecheckKyc</bpmn:outgoing>
       <bpmn:messageEventDefinition id="MessageEventDefinition_KycCompleted" messageRef="Message_KycCompleted" />
     </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_RecheckKyc" name="Re-read KYC status">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cus.verify-kyc" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToRecheckKyc</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToKycOutcome</bpmn:outgoing>
+    </bpmn:serviceTask>
     <bpmn:intermediateCatchEvent id="Timer_KycDocsTimeout" name="Documents not received in 7 days">
       <bpmn:incoming>Flow_ToKycDocsTimeout</bpmn:incoming>
       <bpmn:outgoing>Flow_ToKycTimedOut</bpmn:outgoing>
@@ -55,6 +70,7 @@
         <bpmn:timeDuration>P7D</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
     </bpmn:intermediateCatchEvent>
+    <!-- Only VERIFIED from cus continues; REJECTED, or a status still PENDING after the event, closes the application. -->
     <bpmn:exclusiveGateway id="Gateway_KycOutcome" name="KYC outcome?" default="Flow_KycOutcomeRejected">
       <bpmn:incoming>Flow_ToKycOutcome</bpmn:incoming>
       <bpmn:outgoing>Flow_KycOutcomeVerified</bpmn:outgoing>
@@ -216,7 +232,8 @@
     <bpmn:sequenceFlow id="Flow_KycRejected" name="REJECTED" sourceRef="Gateway_KycStatus" targetRef="Gateway_JoinKycRejected" />
     <bpmn:sequenceFlow id="Flow_ToKycCompleted" sourceRef="Gateway_AwaitKyc" targetRef="Msg_KycCompleted" />
     <bpmn:sequenceFlow id="Flow_ToKycDocsTimeout" sourceRef="Gateway_AwaitKyc" targetRef="Timer_KycDocsTimeout" />
-    <bpmn:sequenceFlow id="Flow_ToKycOutcome" sourceRef="Msg_KycCompleted" targetRef="Gateway_KycOutcome" />
+    <bpmn:sequenceFlow id="Flow_ToRecheckKyc" sourceRef="Msg_KycCompleted" targetRef="Task_RecheckKyc" />
+    <bpmn:sequenceFlow id="Flow_ToKycOutcome" sourceRef="Task_RecheckKyc" targetRef="Gateway_KycOutcome" />
     <bpmn:sequenceFlow id="Flow_ToKycTimedOut" sourceRef="Timer_KycDocsTimeout" targetRef="Event_KycTimedOut" />
     <bpmn:sequenceFlow id="Flow_KycOutcomeVerified" name="VERIFIED" sourceRef="Gateway_KycOutcome" targetRef="Gateway_JoinScreen">
       <bpmn:conditionExpression>=kycStatus = "VERIFIED"</bpmn:conditionExpression>
@@ -271,71 +288,74 @@
       <bpmndi:BPMNShape id="Timer_KycDocsTimeout_di" bpmnElement="Timer_KycDocsTimeout">
         <dc:Bounds x="782" y="252" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_KycOutcome_di" bpmnElement="Gateway_KycOutcome">
-        <dc:Bounds x="945" y="95" width="50" height="50" />
+      <bpmndi:BPMNShape id="Task_RecheckKyc_di" bpmnElement="Task_RecheckKyc">
+        <dc:Bounds x="920" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_KycTimedOut_di" bpmnElement="Event_KycTimedOut">
         <dc:Bounds x="952" y="252" width="36" height="36" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_JoinScreen_di" bpmnElement="Gateway_JoinScreen">
+      <bpmndi:BPMNShape id="Gateway_KycOutcome_di" bpmnElement="Gateway_KycOutcome">
         <dc:Bounds x="1115" y="95" width="50" height="50" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinScreen_di" bpmnElement="Gateway_JoinScreen">
+        <dc:Bounds x="1285" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_JoinKycRejected_di" bpmnElement="Gateway_JoinKycRejected">
-        <dc:Bounds x="1115" y="245" width="50" height="50" />
+        <dc:Bounds x="1285" y="245" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Screen_di" bpmnElement="Task_Screen">
-        <dc:Bounds x="1260" y="80" width="100" height="80" />
+        <dc:Bounds x="1430" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_KycRejected_di" bpmnElement="Event_KycRejected">
-        <dc:Bounds x="1292" y="252" width="36" height="36" />
+        <dc:Bounds x="1462" y="252" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_ScreeningDecision_di" bpmnElement="Gateway_ScreeningDecision">
-        <dc:Bounds x="1455" y="95" width="50" height="50" />
+        <dc:Bounds x="1625" y="95" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_ScreeningReview_di" bpmnElement="Task_ScreeningReview">
-        <dc:Bounds x="1600" y="80" width="100" height="80" />
+        <dc:Bounds x="1770" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_JoinOpen_di" bpmnElement="Gateway_JoinOpen">
-        <dc:Bounds x="1795" y="95" width="50" height="50" />
+        <dc:Bounds x="1965" y="95" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_JoinScreeningRejected_di" bpmnElement="Gateway_JoinScreeningRejected">
-        <dc:Bounds x="1795" y="245" width="50" height="50" />
+        <dc:Bounds x="1965" y="245" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_OpenAccount_di" bpmnElement="Task_OpenAccount">
-        <dc:Bounds x="1940" y="80" width="100" height="80" />
+        <dc:Bounds x="2110" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_ScreeningRejected_di" bpmnElement="Event_ScreeningRejected">
-        <dc:Bounds x="1972" y="252" width="36" height="36" />
+        <dc:Bounds x="2142" y="252" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Jurisdiction_di" bpmnElement="Gateway_Jurisdiction">
-        <dc:Bounds x="2135" y="95" width="50" height="50" />
+        <dc:Bounds x="2305" y="95" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_JoinReject_di" bpmnElement="Gateway_JoinReject">
-        <dc:Bounds x="2135" y="245" width="50" height="50" />
+        <dc:Bounds x="2305" y="245" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_OfferKolayAdres_di" bpmnElement="Task_OfferKolayAdres">
-        <dc:Bounds x="2280" y="80" width="100" height="80" />
+        <dc:Bounds x="2450" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_RejectApplication_di" bpmnElement="Task_RejectApplication">
-        <dc:Bounds x="2280" y="230" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_JoinNotifyOpened_di" bpmnElement="Gateway_JoinNotifyOpened">
-        <dc:Bounds x="2475" y="95" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_NotifyRejected_di" bpmnElement="Task_NotifyRejected">
         <dc:Bounds x="2450" y="230" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinNotifyOpened_di" bpmnElement="Gateway_JoinNotifyOpened">
+        <dc:Bounds x="2645" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyRejected_di" bpmnElement="Task_NotifyRejected">
+        <dc:Bounds x="2620" y="230" width="100" height="80" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_NotifyOpened_di" bpmnElement="Task_NotifyOpened">
-        <dc:Bounds x="2620" y="80" width="100" height="80" />
+        <dc:Bounds x="2790" y="80" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_Rejected_di" bpmnElement="EndEvent_Rejected">
-        <dc:Bounds x="2652" y="252" width="36" height="36" />
+        <dc:Bounds x="2822" y="252" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_AccountOpened_di" bpmnElement="EndEvent_AccountOpened">
-        <dc:Bounds x="2822" y="102" width="36" height="36" />
+        <dc:Bounds x="2992" y="102" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BoundaryEvent_ScreeningRejected_di" bpmnElement="BoundaryEvent_ScreeningRejected">
-        <dc:Bounds x="1650" y="142" width="36" height="36" />
+        <dc:Bounds x="1820" y="142" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_ToVerifyKyc_di" bpmnElement="Flow_ToVerifyKyc">
         <di:waypoint x="120" y="120" />
@@ -347,7 +367,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_KycVerified_di" bpmnElement="Flow_KycVerified">
         <di:waypoint x="460" y="120" />
-        <di:waypoint x="1140" y="120" />
+        <di:waypoint x="1310" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_KycPending_di" bpmnElement="Flow_KycPending">
         <di:waypoint x="460" y="120" />
@@ -356,7 +376,7 @@
       <bpmndi:BPMNEdge id="Flow_KycRejected_di" bpmnElement="Flow_KycRejected">
         <di:waypoint x="460" y="120" />
         <di:waypoint x="460" y="270" />
-        <di:waypoint x="1140" y="270" />
+        <di:waypoint x="1310" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToKycCompleted_di" bpmnElement="Flow_ToKycCompleted">
         <di:waypoint x="630" y="120" />
@@ -367,112 +387,116 @@
         <di:waypoint x="630" y="270" />
         <di:waypoint x="800" y="270" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToKycOutcome_di" bpmnElement="Flow_ToKycOutcome">
+      <bpmndi:BPMNEdge id="Flow_ToRecheckKyc_di" bpmnElement="Flow_ToRecheckKyc">
         <di:waypoint x="800" y="120" />
         <di:waypoint x="970" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToKycOutcome_di" bpmnElement="Flow_ToKycOutcome">
+        <di:waypoint x="970" y="120" />
+        <di:waypoint x="1140" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToKycTimedOut_di" bpmnElement="Flow_ToKycTimedOut">
         <di:waypoint x="800" y="270" />
         <di:waypoint x="970" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_KycOutcomeVerified_di" bpmnElement="Flow_KycOutcomeVerified">
-        <di:waypoint x="970" y="120" />
         <di:waypoint x="1140" y="120" />
+        <di:waypoint x="1310" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_KycOutcomeRejected_di" bpmnElement="Flow_KycOutcomeRejected">
-        <di:waypoint x="970" y="120" />
-        <di:waypoint x="970" y="270" />
+        <di:waypoint x="1140" y="120" />
         <di:waypoint x="1140" y="270" />
+        <di:waypoint x="1310" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToScreen_di" bpmnElement="Flow_ToScreen">
-        <di:waypoint x="1140" y="120" />
         <di:waypoint x="1310" y="120" />
+        <di:waypoint x="1480" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToScreeningDecision_di" bpmnElement="Flow_ToScreeningDecision">
-        <di:waypoint x="1310" y="120" />
         <di:waypoint x="1480" y="120" />
+        <di:waypoint x="1650" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ScreeningClear_di" bpmnElement="Flow_ScreeningClear">
-        <di:waypoint x="1480" y="120" />
-        <di:waypoint x="1820" y="120" />
+        <di:waypoint x="1650" y="120" />
+        <di:waypoint x="1990" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ScreeningReview_di" bpmnElement="Flow_ScreeningReview">
-        <di:waypoint x="1480" y="120" />
         <di:waypoint x="1650" y="120" />
+        <di:waypoint x="1820" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ScreeningRejected_di" bpmnElement="Flow_ScreeningRejected">
-        <di:waypoint x="1480" y="120" />
-        <di:waypoint x="1480" y="270" />
-        <di:waypoint x="1820" y="270" />
+        <di:waypoint x="1650" y="120" />
+        <di:waypoint x="1650" y="270" />
+        <di:waypoint x="1990" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ReviewCleared_di" bpmnElement="Flow_ReviewCleared">
-        <di:waypoint x="1650" y="120" />
         <di:waypoint x="1820" y="120" />
+        <di:waypoint x="1990" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ReviewRejected_di" bpmnElement="Flow_ReviewRejected">
-        <di:waypoint x="1668" y="160" />
-        <di:waypoint x="1668" y="270" />
-        <di:waypoint x="1820" y="270" />
+        <di:waypoint x="1838" y="160" />
+        <di:waypoint x="1838" y="270" />
+        <di:waypoint x="1990" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToOpenAccount_di" bpmnElement="Flow_ToOpenAccount">
-        <di:waypoint x="1820" y="120" />
         <di:waypoint x="1990" y="120" />
+        <di:waypoint x="2160" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToJurisdiction_di" bpmnElement="Flow_ToJurisdiction">
-        <di:waypoint x="1990" y="120" />
         <di:waypoint x="2160" y="120" />
+        <di:waypoint x="2330" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_JurisdictionTr_di" bpmnElement="Flow_JurisdictionTr">
-        <di:waypoint x="2160" y="120" />
         <di:waypoint x="2330" y="120" />
+        <di:waypoint x="2500" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_JurisdictionAe_di" bpmnElement="Flow_JurisdictionAe">
-        <di:waypoint x="2160" y="120" />
-        <di:waypoint x="2500" y="120" />
+        <di:waypoint x="2330" y="120" />
+        <di:waypoint x="2670" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_AliasOffered_di" bpmnElement="Flow_AliasOffered">
-        <di:waypoint x="2330" y="120" />
-        <di:waypoint x="2500" y="120" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToNotifyOpened_di" bpmnElement="Flow_ToNotifyOpened">
         <di:waypoint x="2500" y="120" />
         <di:waypoint x="2670" y="120" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToAccountOpened_di" bpmnElement="Flow_ToAccountOpened">
+      <bpmndi:BPMNEdge id="Flow_ToNotifyOpened_di" bpmnElement="Flow_ToNotifyOpened">
         <di:waypoint x="2670" y="120" />
         <di:waypoint x="2840" y="120" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToAccountOpened_di" bpmnElement="Flow_ToAccountOpened">
+        <di:waypoint x="2840" y="120" />
+        <di:waypoint x="3010" y="120" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToKycRejected_di" bpmnElement="Flow_ToKycRejected">
-        <di:waypoint x="1140" y="270" />
         <di:waypoint x="1310" y="270" />
+        <di:waypoint x="1480" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToScreeningRejected_di" bpmnElement="Flow_ToScreeningRejected">
-        <di:waypoint x="1820" y="270" />
         <di:waypoint x="1990" y="270" />
+        <di:waypoint x="2160" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_KycRejectedToJoin_di" bpmnElement="Flow_KycRejectedToJoin">
-        <di:waypoint x="1310" y="270" />
-        <di:waypoint x="2160" y="270" />
+        <di:waypoint x="1480" y="270" />
+        <di:waypoint x="2330" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_KycTimedOutToJoin_di" bpmnElement="Flow_KycTimedOutToJoin">
         <di:waypoint x="970" y="270" />
-        <di:waypoint x="2160" y="270" />
+        <di:waypoint x="2330" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ScreeningRejectedToJoin_di" bpmnElement="Flow_ScreeningRejectedToJoin">
-        <di:waypoint x="1990" y="270" />
         <di:waypoint x="2160" y="270" />
+        <di:waypoint x="2330" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToRejectApplication_di" bpmnElement="Flow_ToRejectApplication">
-        <di:waypoint x="2160" y="270" />
         <di:waypoint x="2330" y="270" />
+        <di:waypoint x="2500" y="270" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToNotifyRejected_di" bpmnElement="Flow_ToNotifyRejected">
-        <di:waypoint x="2330" y="270" />
-        <di:waypoint x="2500" y="270" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToRejected_di" bpmnElement="Flow_ToRejected">
         <di:waypoint x="2500" y="270" />
         <di:waypoint x="2670" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToRejected_di" bpmnElement="Flow_ToRejected">
+        <di:waypoint x="2670" y="270" />
+        <di:waypoint x="2840" y="270" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

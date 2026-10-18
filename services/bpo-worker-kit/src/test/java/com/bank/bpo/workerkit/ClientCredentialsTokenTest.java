@@ -70,4 +70,43 @@ class ClientCredentialsTokenTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(token::get).isInstanceOfSatisfying(ProviderException.class,
             (e) -> assertThat(e.kind()).isEqualTo(ProviderException.Kind.TRANSIENT));
     }
+
+    // ---- DevSecOps B-1 and S-10 ----
+
+    @Test
+    void theTokenEndpointMustBeHttpsAndTheCredentialAndScopeAreRequired() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new ClientCredentialsToken(URI.create("http://keycloak.bank/token"), "c", "x", "s", Clock.systemUTC()))
+            .isInstanceOf(IllegalArgumentException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new ClientCredentialsToken(URI.create("https://keycloak.bank/token"), "c", "", "s", Clock.systemUTC()))
+            .hasMessageContaining("client credential");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new ClientCredentialsToken(URI.create("https://keycloak.bank/token"), "c", "x", " ", Clock.systemUTC()))
+            .hasMessageContaining("scope");
+    }
+
+    @Test
+    void aRefusedClientIsAContractFaultNotARetry() {
+        try (DomainSimulator sim = DomainSimulator.start()) {
+            for (int status : new int[] {400, 401, 403}) {
+                sim.failWith("token", status, "unauthorized_client", 1);
+                ClientCredentialsToken token = new ClientCredentialsToken(sim.baseUrl().resolve("/token"), "c", "x", "s", Clock.systemUTC());
+                org.assertj.core.api.Assertions.assertThatThrownBy(token::get).as("status " + status).isInstanceOfSatisfying(ProviderException.class,
+                    (e) -> assertThat(e.kind()).isEqualTo(ProviderException.Kind.CONTRACT));
+            }
+            sim.failWith("token", 503, "unavailable", 1);
+            ClientCredentialsToken token = new ClientCredentialsToken(sim.baseUrl().resolve("/token"), "c", "x", "s", Clock.systemUTC());
+            org.assertj.core.api.Assertions.assertThatThrownBy(token::get).isInstanceOfSatisfying(ProviderException.class,
+                (e) -> assertThat(e.kind()).isEqualTo(ProviderException.Kind.TRANSIENT));
+        }
+    }
+
+    @Test
+    void anAnswerWithoutATokenIsNotCached() {
+        try (DomainSimulator sim = DomainSimulator.start()) {
+            sim.answerRaw("token", 200, "{\"token_type\":\"Bearer\"}", 1);
+            ClientCredentialsToken token = new ClientCredentialsToken(sim.baseUrl().resolve("/token"), "c", "x", "s", Clock.systemUTC());
+            org.assertj.core.api.Assertions.assertThatThrownBy(token::get).isInstanceOfSatisfying(ProviderException.class,
+                (e) -> assertThat(e.kind()).isEqualTo(ProviderException.Kind.CONTRACT));
+            assertThat(token.get()).isEqualTo("token-1");
+        }
+    }
 }

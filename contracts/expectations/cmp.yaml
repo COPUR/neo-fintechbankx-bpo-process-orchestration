@@ -1,5 +1,6 @@
 provider: cmp
 service: fintechbankx-riskcompliance-compliance-evidence-core
+audience: svc-cmp-evidence   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
 operations:
   screenOnboardingApplicant:
     status: requested

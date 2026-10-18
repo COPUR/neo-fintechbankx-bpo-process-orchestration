@@ -4,7 +4,9 @@
 #   - a chart version outside the locked range, or an archive whose sha256 differs;
 #   - any container image that is not pinned by digest;
 #   - the chart's demo users, or any inline secret value;
-#   - Connectors, Web Modeler, Hub, Identity or Optimize switched on.
+#   - Connectors, Web Modeler, Hub, Identity or Optimize switched on;
+#   - anything reachable from outside the cluster (Ingress, Route, HTTPRoute, GRPCRoute, a LoadBalancer or
+#     NodePort Service) and any Secret object: secrets come from the secret store, never from the chart.
 # Usage: scripts/ci/camunda-chart-render.sh [chart.tgz]
 # Without an argument the archive is downloaded from the URL in chart-lock.yaml.
 set -euo pipefail
@@ -63,6 +65,13 @@ for env_file in "$dir"/values-*.yaml; do
         *) echo "$env: unexpected workload $w (only the orchestration cluster is allowed)" >&2; fail=1 ;;
       esac
     done
+  fi
+  exposed="$(grep -nE '^kind: (Ingress|Route|HTTPRoute|GRPCRoute|TLSRoute|Gateway|Secret)$' "$out" || true)"
+  if [[ -n "$exposed" ]]; then
+    echo "$env: external routes or Secret objects rendered:" >&2; echo "$exposed" >&2; fail=1
+  fi
+  if grep -qE '^[[:space:]]*type: *"?(LoadBalancer|NodePort)"?$' "$out"; then
+    echo "$env: a Service is exposed as LoadBalancer or NodePort" >&2; fail=1
   fi
   echo "$env: rendered $(grep -c '^kind:' "$out") resources"
 done

@@ -10,7 +10,8 @@ module.exports = {
         'variable-allow-list': 'error',
         binding: 'error',
         naming: 'error',
-        'no-timer-loop': 'error'
+        'no-timer-loop': 'error',
+        'message-no-merge': 'error'
       }
     }
   }

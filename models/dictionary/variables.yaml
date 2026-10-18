@@ -7,6 +7,7 @@ variables:
   customerId: {kind: reference, owner: cus, note: customer id reference; never the profile}
   jurisdiction: {kind: enum, values: [AE, TR]}
   kycStatus: {kind: enum, values: [VERIFIED, PENDING, REJECTED]}
+  kycSignal: {kind: enum, values: [RECEIVED], note: set by Msg_KycCompleted itself; the message payload is never merged}
   screeningId: {kind: reference, owner: cmp}
   screeningDecision: {kind: enum, values: [CLEAR, REVIEW, REJECT]}
   sourceRef: {kind: business-key, note: the calling process's business key, passed to a library process}

@@ -23,7 +23,7 @@ public class ScreenWorker {
 
     @JobWorker(type = "cmp.screen", fetchVariables = {"applicationId"})
     public Map<String, Object> handle(@Variable String applicationId) {
-        return JobErrors.guard(() -> {
+        return JobErrors.guard(applicationId, () -> {
             ScreeningPort.Result result = screening.screen(applicationId, IdempotencyKeys.of(applicationId, "screen"));
             return OutputVariables.of(OUTPUTS, Map.of("screeningId", result.screeningId(), "screeningDecision", result.decision().name()));
         });

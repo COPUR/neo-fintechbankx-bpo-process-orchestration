@@ -22,11 +22,12 @@ import tools.jackson.databind.json.JsonMapper;
  * Stands in for cus, cmp, acc, psg-tr and ntf while their onboarding operations are requested but not yet
  * in the catalog (contracts/expectations/*.yaml lists what the workers need). It keeps the behaviour that
  * matters to the process: a replayed idempotency key returns the first answer, a key reused with another
- * body is refused, and a response can be lost after the effect happened.
+ * body is refused, a response can be lost after the effect happened, and a request without the fields its
+ * expectation names is refused with 400, so a worker that drifts from the contract fails here too.
  */
 public final class DomainSimulator implements AutoCloseable {
 
-    public record Call(String method, String path, String idempotencyKey, Map<String, Object> body) { }
+    public record Call(String method, String path, String idempotencyKey, String interactionId, Map<String, Object> body) { }
 
     private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() { };
     private static final Pattern KYC = Pattern.compile("/api/v1/applications/([^/]+)/kyc");
@@ -40,6 +41,9 @@ public final class DomainSimulator implements AutoCloseable {
     private final Map<String, String> kycByApplication = new HashMap<>();
     private final Map<String, String> screeningByApplication = new HashMap<>();
     private record Failure(int status, String code, int times) { }
+    private record Raw(int status, String body, int times) { }
+
+    private final Map<String, Raw> rawAnswers = new HashMap<>();
 
     private final Map<String, Failure> failuresBefore = new HashMap<>();
     private int tokenExpiresIn = 300;
@@ -102,6 +106,12 @@ public final class DomainSimulator implements AutoCloseable {
         return this;
     }
 
+    /** The next {@code times} calls to the operation answer {@code status} with {@code body} verbatim, before any effect. */
+    public synchronized DomainSimulator answerRaw(String operation, int status, String body, int times) {
+        rawAnswers.put(operation, new Raw(status, body, times));
+        return this;
+    }
+
     /** Seconds the issued tokens say they live (the token endpoint is POST /token). */
     public synchronized DomainSimulator tokenLifetimeSeconds(int seconds) {
         tokenExpiresIn = seconds;
@@ -122,6 +132,7 @@ public final class DomainSimulator implements AutoCloseable {
         kycByApplication.clear();
         screeningByApplication.clear();
         failuresBefore.clear();
+        rawAnswers.clear();
         lostResponses.clear();
         tokensIssued = 0;
         tokenExpiresIn = 300;
@@ -159,17 +170,20 @@ public final class DomainSimulator implements AutoCloseable {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
         String key = exchange.getRequestHeaders().getFirst("x-idempotency-key");
+        String interaction = exchange.getRequestHeaders().getFirst("x-fapi-interaction-id");
         String raw = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         Map<String, Object> body = raw.isBlank() ? Map.of() : raw.startsWith("{") ? json.readValue(raw, MAP) : form(raw);
         Reply reply;
         synchronized (this) {
-            calls.add(new Call(method, path, key, body));
+            calls.add(new Call(method, path, key, interaction, body));
             reply = route(method, path, key, body);
         }
-        byte[] bytes = json.writeValueAsString(reply.body()).getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = (reply.raw() != null ? reply.raw() : json.writeValueAsString(reply.body())).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("content-type", "application/json");
-        exchange.sendResponseHeaders(reply.status(), bytes.length);
-        exchange.getResponseBody().write(bytes);
+        exchange.sendResponseHeaders(reply.status(), bytes.length == 0 ? -1 : bytes.length);
+        if (bytes.length > 0) {
+            exchange.getResponseBody().write(bytes);
+        }
         exchange.close();
     }
 
@@ -184,7 +198,11 @@ public final class DomainSimulator implements AutoCloseable {
         return fields;
     }
 
-    private record Reply(int status, Map<String, Object> body) { }
+    private record Reply(int status, Map<String, Object> body, String raw) {
+        Reply(int status, Map<String, Object> body) {
+            this(status, body, null);
+        }
+    }
 
     private Reply error(int status, String code) {
         return new Reply(status, Map.of("code", code, "message", code));
@@ -199,6 +217,15 @@ public final class DomainSimulator implements AutoCloseable {
         if (failure != null && failure.times() > 0) {
             failuresBefore.put(operation, new Failure(failure.status(), failure.code(), failure.times() - 1));
             return error(failure.status(), failure.code());
+        }
+        Raw raw = rawAnswers.get(operation);
+        if (raw != null && raw.times() > 0) {
+            rawAnswers.put(operation, new Raw(raw.status(), raw.body(), raw.times() - 1));
+            return new Reply(raw.status(), Map.of(), raw.body());
+        }
+        String missing = missingField(operation, body);
+        if (missing != null) {
+            return error(400, "INVALID_" + missing.toUpperCase());
         }
         Reply reply = apply(operation, path, key, body);
         if (reply.status() < 300 && consume(lostResponses, operation)) {
@@ -217,6 +244,36 @@ public final class DomainSimulator implements AutoCloseable {
         if (method.equals("POST") && path.equals("/api/v1/psg-tr/alias-offers")) return "alias-offer";
         if (method.equals("POST") && path.equals("/api/v1/notifications")) return "notify";
         if (method.equals("POST") && path.equals("/token")) return "token";
+        return null;
+    }
+
+    private static final List<String> JURISDICTIONS = List.of("AE", "TR");
+    private static final List<String> REVIEW_DECISIONS = List.of("CLEAR", "REJECT", "EXPIRED");
+    private static final List<String> REJECTION_REASONS = List.of("KYC_REJECTED", "KYC_TIMEOUT", "SCREENING_REJECTED");
+    private static final List<String> PURPOSES = List.of("ACCOUNT_OPENED", "ACCOUNT_APPLICATION_REJECTED");
+
+    /** The request fields contracts/expectations names for each operation; the first one missing or out of range. */
+    private static String missingField(String operation, Map<String, Object> body) {
+        return switch (operation) {
+            case "screen" -> firstMissing(body, "applicationId");
+            case "open-review-case" -> firstMissing(body, "screeningId", "sourceRef", "sourceProcess", "jurisdiction") != null
+                ? firstMissing(body, "screeningId", "sourceRef", "sourceProcess", "jurisdiction")
+                : JURISDICTIONS.contains(body.get("jurisdiction")) ? null : "jurisdiction";
+            case "record-review-decision" -> REVIEW_DECISIONS.contains(body.get("decision")) ? null : "decision";
+            case "reject-application" -> REJECTION_REASONS.contains(body.get("rejectionReason")) ? null : "rejectionReason";
+            case "alias-offer" -> firstMissing(body, "applicationId", "accountId");
+            case "notify" -> firstMissing(body, "subjectRef") != null ? "subjectRef"
+                : PURPOSES.contains(body.get("purpose")) ? null : "purpose";
+            default -> null;
+        };
+    }
+
+    private static String firstMissing(Map<String, Object> body, String... fields) {
+        for (String field : fields) {
+            if (!(body.get(field) instanceof String value) || value.isBlank()) {
+                return field;
+            }
+        }
         return null;
     }
 
@@ -276,7 +333,7 @@ public final class DomainSimulator implements AutoCloseable {
                 tokensIssued++;
                 return new Reply(200, Map.of("access_token", "token-" + tokensIssued, "expires_in", tokenExpiresIn));
             case "reject-application":
-                return new Reply(200, Map.of("status", "REJECTED"));
+                return new Reply(204, Map.of(), "");
             case "alias-offer":
                 return new Reply(200, Map.of("status", "OFFERED"));
             default:

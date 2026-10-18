@@ -2,6 +2,7 @@ package com.bank.bpo.onboarding.handler;
 
 import com.bank.bpo.onboarding.port.NotificationPort;
 import com.bank.bpo.workerkit.IdempotencyKeys;
+import com.bank.bpo.workerkit.Ids;
 import com.bank.bpo.workerkit.JobErrors;
 import com.bank.bpo.workerkit.OutputVariables;
 import io.camunda.client.annotation.JobWorker;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 public class NotifyWorker {
 
     private static final Set<String> OUTPUTS = Set.of("notificationRef");
+    private static final Set<String> PURPOSES = Set.of("ACCOUNT_OPENED", "ACCOUNT_APPLICATION_REJECTED");
     private final NotificationPort notifications;
 
     public NotifyWorker(NotificationPort notifications) {
@@ -24,8 +26,10 @@ public class NotifyWorker {
 
     @JobWorker(type = "ntf.notify", fetchVariables = {"applicationId", "purpose"})
     public Map<String, Object> handle(@Variable String applicationId, @Variable String purpose) {
-        String step = "notify-" + purpose.toLowerCase(Locale.ROOT).replace('_', '-');
-        return JobErrors.guard(() -> OutputVariables.of(OUTPUTS,
-            Map.of("notificationRef", notifications.notify(applicationId, purpose, IdempotencyKeys.of(applicationId, step)))));
+        return JobErrors.guard(applicationId, () -> {
+            String step = "notify-" + Ids.oneOf("purpose", purpose, PURPOSES).toLowerCase(Locale.ROOT).replace('_', '-');
+            return OutputVariables.of(OUTPUTS,
+                Map.of("notificationRef", notifications.notify(applicationId, purpose, IdempotencyKeys.of(applicationId, step))));
+        });
     }
 }

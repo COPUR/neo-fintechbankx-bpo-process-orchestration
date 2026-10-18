@@ -24,9 +24,10 @@ class IdempotencyKeysTest {
 
     @Test
     void aBusinessKeyThatIsNotAPlainIdIsRefused() {
-        assertThatThrownBy(() -> IdempotencyKeys.of("jane doe", "open")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> IdempotencyKeys.of(null, "open")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> IdempotencyKeys.of("app:1", "open")).isInstanceOf(IllegalArgumentException.class);
+        for (String bad : new String[] {"jane doe", null, "app:1", "..", "x/../y", "%2e%2e", "a.b", "x".repeat(65)}) {
+            assertThatThrownBy(() -> IdempotencyKeys.of(bad, "open")).isInstanceOfSatisfying(ProviderException.class,
+                (e) -> assertThat(e.kind()).isEqualTo(ProviderException.Kind.CONTRACT));
+        }
     }
 
     @Test

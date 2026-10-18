@@ -23,7 +23,7 @@ public class OpenAccountWorker {
 
     @JobWorker(type = "acc.open-account", fetchVariables = {"applicationId"})
     public Map<String, Object> handle(@Variable String applicationId) {
-        return JobErrors.guard(() -> OutputVariables.of(OUTPUTS,
+        return JobErrors.guard(applicationId, () -> OutputVariables.of(OUTPUTS,
             Map.of("accountId", accounts.open(applicationId, IdempotencyKeys.of(applicationId, "open")))));
     }
 }

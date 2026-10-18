@@ -21,9 +21,10 @@ public class OpenReviewCaseWorker {
         this.cases = cases;
     }
 
-    @JobWorker(type = "cmp.open-review-case", fetchVariables = {"screeningId", "sourceRef"})
-    public Map<String, Object> handle(@Variable String screeningId, @Variable String sourceRef) {
-        return JobErrors.guard(() -> OutputVariables.of(OUTPUTS,
-            Map.of("caseId", cases.open(screeningId, sourceRef, IdempotencyKeys.of(sourceRef, "open-review-case")))));
+    @JobWorker(type = "cmp.open-review-case", fetchVariables = {"screeningId", "sourceRef", "sourceProcess", "jurisdiction"})
+    public Map<String, Object> handle(@Variable String screeningId, @Variable String sourceRef,
+                                      @Variable String sourceProcess, @Variable String jurisdiction) {
+        return JobErrors.guard(sourceRef, () -> OutputVariables.of(OUTPUTS, Map.of("caseId",
+            cases.open(screeningId, sourceRef, sourceProcess, jurisdiction, IdempotencyKeys.of(sourceRef, "open-review-case")))));
     }
 }

@@ -9,16 +9,13 @@ import java.util.regex.Pattern;
  */
 public final class IdempotencyKeys {
 
-    private static final Pattern BUSINESS_KEY = Pattern.compile("[A-Za-z0-9._-]{1,100}");
     private static final Pattern STEP = Pattern.compile("[a-z][a-z0-9-]{0,40}");
 
     private IdempotencyKeys() {
     }
 
     public static String of(String businessKey, String step) {
-        if (businessKey == null || !BUSINESS_KEY.matcher(businessKey).matches()) {
-            throw new IllegalArgumentException("business key is not a plain id");
-        }
+        Ids.require("business key", businessKey);
         if (step == null || !STEP.matcher(step).matches()) {
             throw new IllegalArgumentException("step is not a kebab-case name");
         }

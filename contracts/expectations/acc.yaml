@@ -1,5 +1,6 @@
 provider: acc
 service: neo-fintechbankx-corebanking-accounts-ledger-service
+audience: svc-acc-accounts-ledger   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
 operations:
   openApplicationAccount:
     status: requested

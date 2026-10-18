@@ -9,6 +9,7 @@ dependencies {
 
     testImplementation project(':domain-simulator')
     testImplementation 'com.tngtech.archunit:archunit-junit5:' + archunitVersion
+    testImplementation 'org.springframework:spring-test'
 }
 
 tasks.named('bootJar') { enabled = false }

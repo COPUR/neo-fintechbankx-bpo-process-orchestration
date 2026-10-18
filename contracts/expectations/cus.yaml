@@ -1,11 +1,12 @@
 provider: cus
 service: fintechbankx-customer-profile-kyc-core
+audience: svc-cus-profile-kyc   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
 operations:
   getKycStatus:
     status: requested
     method: GET
     path: /api/v1/applications/{applicationId}/kyc
-    audience: svc-cus-customer-profile
+    audience: svc-cus-profile-kyc
     caller: svc-bpo-worker-onboarding
     response: {kycStatus: [VERIFIED, PENDING, REJECTED], customerId: id}
     personalData: none   # status and ids only; the profile itself stays in cus

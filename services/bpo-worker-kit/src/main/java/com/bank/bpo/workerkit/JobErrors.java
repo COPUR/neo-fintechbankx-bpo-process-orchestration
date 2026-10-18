@@ -13,6 +13,11 @@ public final class JobErrors {
     private JobErrors() {
     }
 
+    /** {@link #guard(Supplier)} with the provider calls tagged by the business key (see {@link Interaction}). */
+    public static <T> T guard(String businessKey, Supplier<T> call) {
+        return guard(() -> Interaction.within(businessKey, call));
+    }
+
     public static <T> T guard(Supplier<T> call) {
         try {
             return call.get();

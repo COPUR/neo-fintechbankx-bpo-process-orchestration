@@ -7,7 +7,8 @@ criteria:
     claim: every P1 path is covered by a process test on Camunda 8.10.4 and passes
     paths: [happy AE, happy TR with alias, KYC rejected, KYC pending then verified, KYC pending then rejected,
             KYC timeout, screening fail, review clear (AE queue), review in TR queue, default routing, review reject, escalation, review expiry,
-            lost response on the pivot, persistent provider outage, variable set]
+            lost response on the pivot, persistent provider outage, variable set, forged KYC message,
+            open answer without accountId, crafted application id]
     check: ./gradlew :cpt:test
   - id: POT1-PIVOT
     claim: a lost response on acc.open-account retries with the same key and opens one account

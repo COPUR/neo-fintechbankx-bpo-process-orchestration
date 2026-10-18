@@ -1,5 +1,6 @@
 provider: ntf
 service: notification service (not created yet, phase 5)
+audience: none yet (no client)   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
 operations:
   sendNotification:
     status: requested

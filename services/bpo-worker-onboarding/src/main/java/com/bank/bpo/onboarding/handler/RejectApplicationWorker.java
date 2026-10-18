@@ -20,7 +20,7 @@ public class RejectApplicationWorker {
 
     @JobWorker(type = "acc.reject-application", fetchVariables = {"applicationId", "rejectionReason"})
     public Map<String, Object> handle(@Variable String applicationId, @Variable String rejectionReason) {
-        JobErrors.guard(() -> {
+        JobErrors.guard(applicationId, () -> {
             accounts.reject(applicationId, rejectionReason, IdempotencyKeys.of(applicationId, "reject"));
             return null;
         });

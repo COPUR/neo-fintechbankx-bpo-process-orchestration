@@ -11,8 +11,8 @@ import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * cmp.record-review-decision: posts the reviewer's decision (or EXPIRED when nobody decided) to cmp.
- * An absent decision is posted as EXPIRED, never as a clearance.
+ * cmp.record-review-decision: posts the reviewer's decision, or EXPIRED set by the SLA expiry event, to cmp.
+ * Anything other than CLEAR, REJECT or EXPIRED is a contract fault (an incident), never a clearance.
  */
 @Component
 public class RecordReviewDecisionWorker {
@@ -24,10 +24,11 @@ public class RecordReviewDecisionWorker {
         this.cases = cases;
     }
 
-    @JobWorker(type = "cmp.record-review-decision", fetchVariables = {"caseId", "reviewDecision"})
-    public Map<String, Object> handle(@Variable String caseId, @Variable String reviewDecision) {
-        String decision = reviewDecision == null || reviewDecision.isBlank() ? "EXPIRED" : reviewDecision;
-        return JobErrors.guard(() -> OutputVariables.of(OUTPUTS,
-            Map.of("reviewOutcome", cases.record(caseId, decision, IdempotencyKeys.of(caseId, "record-decision")).name())));
+    @JobWorker(type = "cmp.record-review-decision", fetchVariables = {"caseId", "reviewDecision", "sourceRef"})
+    public Map<String, Object> handle(@Variable String caseId, @Variable String reviewDecision, @Variable String sourceRef) {
+        // The decision comes from a reviewer's form or from the SLA expiry (EXPIRED); anything else, a missing one
+        // included, is refused by the adapter as a contract fault.
+        return JobErrors.guard(sourceRef, () -> OutputVariables.of(OUTPUTS,
+            Map.of("reviewOutcome", cases.record(caseId, reviewDecision, IdempotencyKeys.of(caseId, "record-decision")).name())));
     }
 }
