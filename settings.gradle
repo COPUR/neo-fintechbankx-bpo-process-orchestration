@@ -11,10 +11,12 @@ rootProject.name = 'neo-fintechbankx-bpo-process-orchestration'
 // Repository-internal module shared by the worker families: idempotency keys, output guard, provider HTTP.
 include 'bpo-worker-kit'
 // One job-worker service per family (07 section 1.2): onboarding (P1) and payments (P2, TR FAST profile) carry
-// code; cards, lending, compliance and engagement, process-api and event-bridge have a README under services/
-// and join this list when their first code arrives.
+// code; cards, lending, compliance and engagement and event-bridge have a README under services/ and join
+// this list when their first code arrives.
 include 'bpo-worker-onboarding'
 include 'bpo-worker-payments'
+// Staff task API behind the staff web (ui/bpo-staff-web): one controller per human actor.
+include 'bpo-process-api'
 // Contract simulator the workers are tested against (no domain code is imported).
 include 'domain-simulator'
 // Camunda Process Test suites over models/ (the engine runs in a Testcontainers container).
@@ -22,7 +24,7 @@ include 'cpt'
 // The ArchUnit rule proposed to the domain repositories (no io.camunda), with its own red/green test.
 include 'archunit-no-camunda'
 
-['bpo-worker-kit', 'bpo-worker-onboarding', 'bpo-worker-payments'].each { project(":$it").projectDir = file("services/$it") }
+['bpo-worker-kit', 'bpo-worker-onboarding', 'bpo-worker-payments', 'bpo-process-api'].each { project(":$it").projectDir = file("services/$it") }
 project(':domain-simulator').projectDir = file('simulators/domain-simulator')
 project(':cpt').projectDir = file('tests/cpt')
 project(':archunit-no-camunda').projectDir = file('tests/archunit-no-camunda')

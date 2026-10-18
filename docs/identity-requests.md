@@ -11,7 +11,8 @@ it; the identity owner adds the clients there. Authentication of worker calls is
 | `svc-bpo-worker-payments` | service, client credentials | payments job workers (TR cluster first) | engine: activate and complete jobs of the payments job types only, no process start, no message publish. Providers: one scope per audience (below); its `azp` on each provider's caller allow-list |
 | `svc-bpo-event-bridge` | service, client credentials | the event bridge (later) | engine: message publish only. It is the only client allowed to publish `Msg_KycCompleted`, `Msg_SchemeStatusReported` and every later message |
 | `svc-bpo-ci-deployer` | service, client credentials | model deployment from `main` (later) | engine: deployment only |
-| `svc-bpo-process` | service | `bpo-process-api` (later) | engine: process start and user task permissions |
+| `svc-bpo-process` | service, client credentials | `bpo-process-api` | engine: user task read, assign, unassign and complete on `lib-screening-review` and `pay-instant-exception` (process start later); also the audience staff tokens carry |
+| `bpo-staff-web` | public, authorization code with PKCE (S256), DPoP-bound tokens required | the staff web (`ui/bpo-staff-web`) | scope that adds `svc-bpo-process` to `aud`; `preferred_username` and a `groups` claim with the queue groups below; redirect URI of the staff web host |
 
 Provider audiences for `svc-bpo-worker-onboarding` (the existing client ids, so no new audience is created):
 

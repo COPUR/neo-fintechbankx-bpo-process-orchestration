@@ -1,0 +1,70 @@
+package com.bank.bpo.processapi.config;
+
+import com.bank.bpo.processapi.adapter.camunda.CamundaUserTaskAdapter;
+import com.bank.bpo.processapi.adapter.web.StaffUsers;
+import com.bank.bpo.processapi.application.QueueGroups;
+import com.bank.bpo.processapi.application.TaskInbox;
+import com.bank.bpo.processapi.application.port.UserTaskPort;
+import com.bank.bpo.processapi.domain.Actor;
+import com.bank.bpo.workerkit.ClientCredentialsToken;
+import java.time.Clock;
+import java.util.EnumMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/** Wires the use cases to the engine adapter and the token reader. */
+@Configuration(proxyBeanMethods = false)
+public class ApplicationConfiguration {
+
+    @Bean
+    UserTaskPort userTaskPort(ProcessApiProperties properties) {
+        ProcessApiProperties.Engine engine = properties.engine();
+        ClientCredentialsToken token = new ClientCredentialsToken(engine.tokenUri(), engine.clientId(),
+            engine.clientCredential(), engine.scope(), Clock.systemUTC());
+        return new CamundaUserTaskAdapter(engine.baseUrl(), token);
+    }
+
+    @Bean
+    QueueGroups queueGroups(ProcessApiProperties properties) {
+        return new QueueGroups(queues(properties.queues()));
+    }
+
+    @Bean
+    TaskInbox taskInbox(UserTaskPort tasks, QueueGroups queues) {
+        return new TaskInbox(tasks, queues);
+    }
+
+    @Bean
+    StaffUsers staffUsers(ProcessApiProperties properties) {
+        return new StaffUsers(properties.token().userClaim(), properties.token().groupsClaim());
+    }
+
+    /** Every actor needs at least one queue group, and no group may serve two actors. */
+    static Map<Actor, Set<String>> queues(Map<String, List<String>> configured) {
+        if (configured == null) {
+            throw new IllegalStateException("bpo.process-api.queues is required");
+        }
+        Map<Actor, Set<String>> byActor = new EnumMap<>(Actor.class);
+        Set<String> seen = new LinkedHashSet<>();
+        configured.forEach((id, groups) -> {
+            Actor actor = Actor.fromId(id)
+                .orElseThrow(() -> new IllegalStateException("bpo.process-api.queues names an unknown actor"));
+            for (String g : groups) {
+                if (g == null || g.isBlank() || !seen.add(g)) {
+                    throw new IllegalStateException("a queue group is blank or serves two actors");
+                }
+            }
+            byActor.put(actor, new LinkedHashSet<>(groups));
+        });
+        for (Actor actor : Actor.values()) {
+            if (byActor.getOrDefault(actor, Set.of()).isEmpty()) {
+                throw new IllegalStateException("bpo.process-api.queues has no group for " + actor.id());
+            }
+        }
+        return byActor;
+    }
+}

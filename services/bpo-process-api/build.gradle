@@ -1,0 +1,18 @@
+apply plugin: 'org.springframework.boot'
+
+description = 'bpo-process-api - staff task API (list, claim, release, decide) per human actor, DPoP only'
+
+dependencies {
+    // Only the client-credentials token comes from the kit; the API is not a job worker and never loads the
+    // Camunda client.
+    implementation(project(':bpo-worker-kit')) {
+        exclude group: 'io.camunda'
+    }
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+    implementation 'tools.jackson.core:jackson-databind'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:' + archunitVersion
+}

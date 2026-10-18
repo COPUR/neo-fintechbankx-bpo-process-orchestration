@@ -26,7 +26,9 @@ repos to keep `io.camunda` out (`docs/proposals/archunit-no-camunda.md`).
 | `lint/` | bpmnlint (recommended + camunda-compat `camunda-cloud-8-10`) and the repo's `fbx` rules, with tests. |
 | `services/bpo-worker-kit` | Idempotency keys, provider HTTP with status mapping, output variable filter, job error mapping. |
 | `services/bpo-worker-<family>` | One worker module per family. `onboarding` and `payments` carry code; the others have a README until their first model. |
-| `services/bpo-process-api`, `services/bpo-event-bridge` | Planned: start/query/human task API, and the Kafka inbox/outbox bridge (ADR-019). |
+| `services/bpo-process-api` | Staff task API: one controller per human actor (list, claim, release, decide), DPoP only, four eyes. |
+| `ui/bpo-staff-web` | Staff web for user tasks per actor, Turkish and English (`docs/ux/staff-task-ux.md`). |
+| `services/bpo-event-bridge` | Planned: the Kafka inbox/outbox bridge (ADR-019). |
 | `simulators/domain-simulator` | In-process HTTP stand-in for every provider operation the workers call. |
 | `tests/cpt` | Camunda Process Tests of every model against the real engine (Testcontainers) and the simulator. |
 | `tests/archunit-no-camunda` | The proposed domain-repo rule and its fixtures. |
@@ -72,7 +74,7 @@ bash scripts/ci/camunda-chart-render.sh   # needs helm 3.19+
 | `ci/test` | required-gates | A failing unit, contract, ArchUnit or process test; a model or `src/main` change without a test change. |
 | `ci/test-arm64` | required-gates | The same tests failing on arm64. |
 | `ci/security` | required-gates | A secret in the workspace (gitleaks). |
-| `models/lint` | models | A model or decision the lint rules refuse; a job type without a contract expectation. |
+| `models/lint` | models | A model or decision the lint rules refuse; a job type without a contract expectation; a failing staff web test. |
 | `deploy/camunda-chart` | models | A chart archive other than the locked one, a tag-only image, demo users, an inline secret, a component other than the orchestration cluster. |
 | publication guardrails | publication-guardrails | Local paths, personal addresses and secret-like literals in published files. |
 

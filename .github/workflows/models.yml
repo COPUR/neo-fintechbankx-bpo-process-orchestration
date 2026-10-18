@@ -1,6 +1,7 @@
 name: Models
 # BPMN/DMN lint (bpmnlint with the camunda-cloud-8-10 profile plus the repo's own fbx rules), the lint
-# rules' own tests, the catalog pin check, and a render of the Camunda 8.10 chart for every environment.
+# rules' own tests, the catalog pin check, the staff web tests, and a render of the Camunda 8.10 chart for
+# every environment.
 # GitHub-hosted runners only (public repository): see required-gates.yml.
 
 on:
@@ -38,6 +39,9 @@ jobs:
 
       - name: Catalog pins
         run: bash scripts/ci/check-catalog-pins.sh
+
+      - name: Staff web tests
+        run: npm test --prefix ui/bpo-staff-web
 
   chart:
     name: deploy/camunda-chart
