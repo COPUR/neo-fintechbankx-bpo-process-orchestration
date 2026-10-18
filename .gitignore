@@ -1,0 +1,17 @@
+.gradle/
+build/
+**/build/
+*.iml
+.idea/
+/out/
+# Hexagonal port packages are named "out"; never ignore source directories.
+!**/src/**/out/
+
+# Model lint dependencies (npm ci --prefix lint)
+lint/node_modules/
+# Camunda chart downloaded and rendered by scripts/ci/camunda-chart-render.sh
+deploy/camunda-platform/.chart/
+deploy/camunda-platform/rendered-*.yaml
+
+# Camunda Process Test coverage report
+**/target/

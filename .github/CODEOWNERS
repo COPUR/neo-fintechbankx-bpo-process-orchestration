@@ -1,0 +1,23 @@
+# bounded_context: bpo (business process orchestration)
+# owning_squad: Process Platform squad (Platform and Reliability)
+# data_owner: none (process state only; no money, rules or personal data)
+# published_events: none yet (bpo-event-bridge)
+# consumed_events: evt.cus.customer.v1 (requested)
+# Every area has one owner today. The squad split below (07 §1.3) takes effect when the squads
+# have GitHub teams; until then each line names the same owner so the map is visible.
+* @COPUR
+
+# Process Platform: engine, bridge, libraries, lint and the worker kit.
+/deploy/camunda-platform/ @COPUR
+/models/bpmn/_lib/ @COPUR
+/lint/ @COPUR
+/services/bpo-worker-kit/ @COPUR
+/scripts/ci/ @COPUR
+/.github/ @COPUR
+
+# Core Banking Accounts: P1.
+/models/bpmn/acc/ @COPUR
+/services/bpo-worker-onboarding/ @COPUR
+
+# Risk and Compliance Decisioning: review routing.
+/models/dmn/cmp/ @COPUR

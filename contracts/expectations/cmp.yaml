@@ -1,0 +1,26 @@
+provider: cmp
+service: fintechbankx-riskcompliance-compliance-evidence-core
+audience: svc-cmp-evidence   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
+operations:
+  screenOnboardingApplicant:
+    status: requested
+    method: POST
+    path: /api/v1/compliance/onboarding-screenings
+    idempotencyKey: "<applicationId>:screen"
+    request: {applicationId: id}
+    response: {screeningId: id, decision: [PASS, REVIEW, FAIL]}
+    note: The existing screenCompliance needs an amount and is transaction-oriented; onboarding needs its own operation.
+  openReviewCase:
+    status: requested
+    method: POST
+    path: /api/v1/compliance/review-cases
+    idempotencyKey: "<sourceRef>:open-review-case"
+    request: {screeningId: id, sourceRef: id, sourceProcess: string, jurisdiction: [AE, TR]}
+    response: {caseId: id}
+  recordReviewDecision:
+    status: requested
+    method: POST
+    path: /api/v1/compliance/review-cases/{caseId}/decision
+    idempotencyKey: "<caseId>:record-decision"
+    request: {decision: [CLEAR, REJECT, EXPIRED]}
+    response: {outcome: [CLEARED, REJECTED]}

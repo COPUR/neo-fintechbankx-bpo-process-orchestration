@@ -1,0 +1,23 @@
+{
+  "id": "cmp-review-senior-decision",
+  "type": "default",
+  "schemaVersion": 16,
+  "components": [
+    {
+      "type": "text",
+      "id": "Field_CaseHint",
+      "text": "Open case {{caseId}} in the compliance case view. This task holds no screening detail; decide there, then record the decision here."
+    },
+    {
+      "type": "radio",
+      "id": "Field_ReviewDecision",
+      "key": "reviewDecision",
+      "label": "Decision",
+      "validate": { "required": true },
+      "values": [
+        { "label": "Clear", "value": "CLEAR" },
+        { "label": "Reject", "value": "REJECT" }
+      ]
+    }
+  ]
+}

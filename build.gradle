@@ -1,0 +1,86 @@
+plugins {
+    id 'java-library'
+    id 'io.spring.dependency-management' version '1.1.7' apply false
+    id 'org.springframework.boot' version '4.1.1' apply false
+}
+
+description = 'bpo - Camunda 8.10 process orchestration - FinTechBankX'
+
+// Pins for the whole repository. The engine version here, the CPT image and deploy/camunda-platform/chart-lock.yaml
+// move together (07 §2.5: an engine upgrade touches only this repository).
+ext {
+    springBootVersion = '4.1.1'
+    camundaVersion = '8.10.4'
+    archunitVersion = '1.4.1'
+}
+
+allprojects {
+    group = 'com.fintechbankx'
+    version = '0.1.0'
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'io.spring.dependency-management'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(23)
+        }
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+            mavenBom "io.camunda:camunda-bom:${camundaVersion}"
+        }
+    }
+
+    dependencies {
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testImplementation 'org.assertj:assertj-core'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs << '-parameters'
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+    }
+}
+
+// The simulator and the process tests are test code even though the simulator has a main source set. No
+// deployable module may carry them outside its test classpaths (DevSecOps S-12).
+def testOnlyModules = ['domain-simulator', 'cpt', 'archunit-no-camunda']
+def deployableModules = ['bpo-worker-kit', 'bpo-worker-onboarding']
+configure(subprojects.findAll { it.name in deployableModules }) { p ->
+    def verify = p.tasks.register('verifyNoTestOnlyModules') {
+        description = 'Fails when a test-only module reaches a non-test configuration'
+        group = 'verification'
+        def configurationNames = ['api', 'implementation', 'compileOnly', 'runtimeOnly', 'compileClasspath', 'runtimeClasspath']
+        doLast {
+            configurationNames.each { name ->
+                def c = p.configurations.findByName(name)
+                if (c == null) {
+                    return
+                }
+                def offending = c.allDependencies.withType(ProjectDependency).collect { it.name }.findAll { it in testOnlyModules }
+                if (c.canBeResolved) {
+                    offending += c.incoming.resolutionResult.allComponents
+                        .collect { it.id }.findAll { it instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier }
+                        .collect { it.projectName }.findAll { it in testOnlyModules }
+                }
+                if (!offending.isEmpty()) {
+                    throw new GradleException("${p.name}: ${name} carries test-only module(s) ${offending.unique()}")
+                }
+            }
+        }
+    }
+    p.tasks.named('check') { dependsOn verify }
+}

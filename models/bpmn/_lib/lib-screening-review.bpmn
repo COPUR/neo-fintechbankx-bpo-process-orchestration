@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  id="Definitions_LibScreeningReview"
+                  targetNamespace="https://fintechbankx.example/bpo"
+                  exporter="fbx-bpo" exporterVersion="0.1.0"
+                  modeler:executionPlatform="Camunda Cloud"
+                  modeler:executionPlatformVersion="8.10.0">
+  <bpmn:error id="Error_ScreeningRejected" name="Err_ScreeningRejected" errorCode="Err_ScreeningRejected" />
+  <!-- L1 (07 §3.2): human review of a REVIEW screening. The decision of record is cmp's: the analyst's
+       choice is posted to cmp, and cmp's answer (reviewOutcome) decides the path. Queues and SLAs come
+       from the routing DMN; no amount, list-hit detail or personal data enters the process. -->
+  <bpmn:process id="lib-screening-review" name="Screening review (library)" isExecutable="true">
+    <bpmn:extensionElements>
+      <zeebe:versionTag value="0.1.0" />
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="StartEvent_ReviewRequested" name="Review requested">
+      <bpmn:outgoing>Flow_ToOpenCase</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_OpenReviewCase" name="Open review case">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cmp.open-review-case" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToOpenCase</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToRouting</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:businessRuleTask id="Task_RouteReview" name="Route review">
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="cmp-review-routing" resultVariable="routing" bindingType="versionTag" versionTag="0.1.0" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToRouting</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToAnalystReview</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:userTask id="Task_AnalystReview" name="Analyst review">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="cmp-review-analyst-decision" bindingType="deployment" />
+        <zeebe:assignmentDefinition candidateGroups="=[routing.reviewQueue]" />
+        <zeebe:taskSchedule dueDate="=now() + duration(routing.reviewSla)" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToAnalystReview</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToAnalystDecision</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="BoundaryEvent_AnalystSla" name="Analyst SLA expired" attachedToRef="Task_AnalystReview">
+      <bpmn:outgoing>Flow_AnalystSlaToJoin</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_AnalystSla">
+        <bpmn:timeDuration>=routing.reviewSla</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:exclusiveGateway id="Gateway_AnalystDecision" name="Analyst decision?" default="Flow_AnalystDecided">
+      <bpmn:incoming>Flow_ToAnalystDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_AnalystEscalated</bpmn:outgoing>
+      <bpmn:outgoing>Flow_AnalystDecided</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="Gateway_JoinSeniorReview">
+      <bpmn:incoming>Flow_AnalystEscalated</bpmn:incoming>
+      <bpmn:incoming>Flow_AnalystSlaToJoin</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToSeniorReview</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_SeniorReview" name="Senior review (MLRO)">
+      <bpmn:extensionElements>
+        <zeebe:userTask />
+        <zeebe:formDefinition formId="cmp-review-senior-decision" bindingType="deployment" />
+        <zeebe:assignmentDefinition candidateGroups="=[routing.escalationQueue]" />
+        <zeebe:taskSchedule dueDate="=now() + duration(routing.escalationSla)" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToSeniorReview</bpmn:incoming>
+      <bpmn:outgoing>Flow_SeniorDecided</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="BoundaryEvent_SeniorSla" name="Senior SLA expired" attachedToRef="Task_SeniorReview">
+      <bpmn:outgoing>Flow_ToReviewExpired</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_SeniorSla">
+        <bpmn:timeDuration>=routing.escalationSla</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:intermediateThrowEvent id="Event_ReviewExpired" name="Review expired">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <!-- Fail closed (C8-K9): an onboarding review nobody decided is posted to cmp as expired. -->
+          <zeebe:output source="=&#34;EXPIRED&#34;" target="reviewDecision" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToReviewExpired</bpmn:incoming>
+      <bpmn:outgoing>Flow_ExpiredToJoin</bpmn:outgoing>
+    </bpmn:intermediateThrowEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinRecord">
+      <bpmn:incoming>Flow_AnalystDecided</bpmn:incoming>
+      <bpmn:incoming>Flow_SeniorDecided</bpmn:incoming>
+      <bpmn:incoming>Flow_ExpiredToJoin</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToRecordDecision</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_RecordReviewDecision" name="Record review decision">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cmp.record-review-decision" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToRecordDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToReviewOutcome</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_ReviewOutcome" name="Review outcome?" default="Flow_ReviewRejected">
+      <bpmn:incoming>Flow_ToReviewOutcome</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReviewCleared</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ReviewRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="EndEvent_Cleared" name="Cleared">
+      <bpmn:incoming>Flow_ReviewCleared</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="EndEvent_Rejected" name="Rejected">
+      <bpmn:incoming>Flow_ReviewRejected</bpmn:incoming>
+      <bpmn:errorEventDefinition id="ErrorEventDefinition_Rejected" errorRef="Error_ScreeningRejected" />
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_ToOpenCase" sourceRef="StartEvent_ReviewRequested" targetRef="Task_OpenReviewCase" />
+    <bpmn:sequenceFlow id="Flow_ToRouting" sourceRef="Task_OpenReviewCase" targetRef="Task_RouteReview" />
+    <bpmn:sequenceFlow id="Flow_ToAnalystReview" sourceRef="Task_RouteReview" targetRef="Task_AnalystReview" />
+    <bpmn:sequenceFlow id="Flow_ToAnalystDecision" sourceRef="Task_AnalystReview" targetRef="Gateway_AnalystDecision" />
+    <bpmn:sequenceFlow id="Flow_AnalystEscalated" name="ESCALATE" sourceRef="Gateway_AnalystDecision" targetRef="Gateway_JoinSeniorReview">
+      <bpmn:conditionExpression>=reviewDecision = "ESCALATE"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_AnalystDecided" name="CLEAR or REJECT" sourceRef="Gateway_AnalystDecision" targetRef="Gateway_JoinRecord" />
+    <bpmn:sequenceFlow id="Flow_AnalystSlaToJoin" sourceRef="BoundaryEvent_AnalystSla" targetRef="Gateway_JoinSeniorReview" />
+    <bpmn:sequenceFlow id="Flow_ToSeniorReview" sourceRef="Gateway_JoinSeniorReview" targetRef="Task_SeniorReview" />
+    <bpmn:sequenceFlow id="Flow_SeniorDecided" sourceRef="Task_SeniorReview" targetRef="Gateway_JoinRecord" />
+    <bpmn:sequenceFlow id="Flow_ToReviewExpired" sourceRef="BoundaryEvent_SeniorSla" targetRef="Event_ReviewExpired" />
+    <bpmn:sequenceFlow id="Flow_ExpiredToJoin" sourceRef="Event_ReviewExpired" targetRef="Gateway_JoinRecord" />
+    <bpmn:sequenceFlow id="Flow_ToRecordDecision" sourceRef="Gateway_JoinRecord" targetRef="Task_RecordReviewDecision" />
+    <bpmn:sequenceFlow id="Flow_ToReviewOutcome" sourceRef="Task_RecordReviewDecision" targetRef="Gateway_ReviewOutcome" />
+    <bpmn:sequenceFlow id="Flow_ReviewCleared" name="CLEARED" sourceRef="Gateway_ReviewOutcome" targetRef="EndEvent_Cleared">
+      <bpmn:conditionExpression>=reviewOutcome = "CLEARED"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ReviewRejected" name="otherwise" sourceRef="Gateway_ReviewOutcome" targetRef="EndEvent_Rejected" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="lib-screening-review">
+      <bpmndi:BPMNShape id="StartEvent_ReviewRequested_di" bpmnElement="StartEvent_ReviewRequested">
+        <dc:Bounds x="102" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_OpenReviewCase_di" bpmnElement="Task_OpenReviewCase">
+        <dc:Bounds x="240" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RouteReview_di" bpmnElement="Task_RouteReview">
+        <dc:Bounds x="410" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AnalystReview_di" bpmnElement="Task_AnalystReview">
+        <dc:Bounds x="580" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_AnalystDecision_di" bpmnElement="Gateway_AnalystDecision">
+        <dc:Bounds x="775" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinSeniorReview_di" bpmnElement="Gateway_JoinSeniorReview">
+        <dc:Bounds x="945" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SeniorReview_di" bpmnElement="Task_SeniorReview">
+        <dc:Bounds x="1090" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_ReviewExpired_di" bpmnElement="Event_ReviewExpired">
+        <dc:Bounds x="1292" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinRecord_di" bpmnElement="Gateway_JoinRecord">
+        <dc:Bounds x="1455" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RecordReviewDecision_di" bpmnElement="Task_RecordReviewDecision">
+        <dc:Bounds x="1600" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ReviewOutcome_di" bpmnElement="Gateway_ReviewOutcome">
+        <dc:Bounds x="1795" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Cleared_di" bpmnElement="EndEvent_Cleared">
+        <dc:Bounds x="1972" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Rejected_di" bpmnElement="EndEvent_Rejected">
+        <dc:Bounds x="1972" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BoundaryEvent_AnalystSla_di" bpmnElement="BoundaryEvent_AnalystSla">
+        <dc:Bounds x="630" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BoundaryEvent_SeniorSla_di" bpmnElement="BoundaryEvent_SeniorSla">
+        <dc:Bounds x="1140" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToOpenCase_di" bpmnElement="Flow_ToOpenCase">
+        <di:waypoint x="120" y="120" />
+        <di:waypoint x="290" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToRouting_di" bpmnElement="Flow_ToRouting">
+        <di:waypoint x="290" y="120" />
+        <di:waypoint x="460" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToAnalystReview_di" bpmnElement="Flow_ToAnalystReview">
+        <di:waypoint x="460" y="120" />
+        <di:waypoint x="630" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToAnalystDecision_di" bpmnElement="Flow_ToAnalystDecision">
+        <di:waypoint x="630" y="120" />
+        <di:waypoint x="800" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AnalystEscalated_di" bpmnElement="Flow_AnalystEscalated">
+        <di:waypoint x="800" y="120" />
+        <di:waypoint x="970" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AnalystDecided_di" bpmnElement="Flow_AnalystDecided">
+        <di:waypoint x="800" y="120" />
+        <di:waypoint x="1480" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AnalystSlaToJoin_di" bpmnElement="Flow_AnalystSlaToJoin">
+        <di:waypoint x="648" y="160" />
+        <di:waypoint x="648" y="120" />
+        <di:waypoint x="970" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToSeniorReview_di" bpmnElement="Flow_ToSeniorReview">
+        <di:waypoint x="970" y="120" />
+        <di:waypoint x="1140" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SeniorDecided_di" bpmnElement="Flow_SeniorDecided">
+        <di:waypoint x="1140" y="120" />
+        <di:waypoint x="1480" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToReviewExpired_di" bpmnElement="Flow_ToReviewExpired">
+        <di:waypoint x="1158" y="160" />
+        <di:waypoint x="1158" y="120" />
+        <di:waypoint x="1310" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ExpiredToJoin_di" bpmnElement="Flow_ExpiredToJoin">
+        <di:waypoint x="1310" y="120" />
+        <di:waypoint x="1480" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToRecordDecision_di" bpmnElement="Flow_ToRecordDecision">
+        <di:waypoint x="1480" y="120" />
+        <di:waypoint x="1650" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToReviewOutcome_di" bpmnElement="Flow_ToReviewOutcome">
+        <di:waypoint x="1650" y="120" />
+        <di:waypoint x="1820" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReviewCleared_di" bpmnElement="Flow_ReviewCleared">
+        <di:waypoint x="1820" y="120" />
+        <di:waypoint x="1990" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReviewRejected_di" bpmnElement="Flow_ReviewRejected">
+        <di:waypoint x="1820" y="120" />
+        <di:waypoint x="1820" y="270" />
+        <di:waypoint x="1990" y="270" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

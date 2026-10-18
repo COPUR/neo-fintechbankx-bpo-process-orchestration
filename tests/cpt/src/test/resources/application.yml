@@ -1,0 +1,8 @@
+camunda:
+  process-test:
+    camunda-docker-image-name: camunda/camunda
+    camunda-docker-image-version: 8.10.4
+spring:
+  profiles:
+    # Fixed token and loopback http only: the worker refuses both outside this profile.
+    active: simulator

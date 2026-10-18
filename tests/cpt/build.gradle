@@ -1,0 +1,22 @@
+description = 'CPT - Camunda Process Test suites for the models, run against the real onboarding workers and the domain simulator'
+
+dependencies {
+    testImplementation project(':bpo-worker-onboarding')
+    testImplementation project(':domain-simulator')
+    testImplementation 'io.camunda:camunda-process-test-spring'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+sourceSets {
+    test {
+        // The models are the system under test; they are deployed from their place in the repository.
+        resources.srcDir rootProject.file('models')
+    }
+}
+
+tasks.named('test') {
+    // The engine runs in a Testcontainers container. The Ryuk reaper needs a second image pull from Docker Hub,
+    // which the shared runners rate-limit; the container is stopped by the extension's own cleanup.
+    environment 'TESTCONTAINERS_RYUK_DISABLED', 'true'
+    testLogging { events 'failed'; exceptionFormat 'full' }
+}

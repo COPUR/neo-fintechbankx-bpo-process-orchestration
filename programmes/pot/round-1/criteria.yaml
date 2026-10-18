@@ -1,0 +1,28 @@
+round: pot-1
+criteria:
+  - id: POT1-LINT
+    claim: every model passes the lint with 0 errors and the lint rules are tested red and green
+    check: npm test --prefix lint && npm run lint --prefix lint
+  - id: POT1-CPT
+    claim: every P1 path is covered by a process test on Camunda 8.10.4 and passes
+    paths: [happy AE, happy TR with alias, KYC rejected, KYC pending then verified, KYC pending then rejected,
+            KYC timeout, screening fail, review clear (AE queue), review in TR queue, default routing, review reject, escalation, review expiry,
+            lost response on the pivot, persistent provider outage, variable set, forged KYC message,
+            open answer without accountId, crafted application id]
+    check: ./gradlew :cpt:test
+  - id: POT1-PIVOT
+    claim: a lost response on acc.open-account retries with the same key and opens one account
+    check: ./gradlew :cpt:test --tests '*AccTppAccountOpeningTest*'
+  - id: POT1-VARS
+    claim: an instance holds only allow-listed ids and enums, under 8 KB
+    check: ./gradlew :cpt:test --tests '*AccTppAccountOpeningTest*'
+  - id: POT1-CHART
+    claim: the locked chart renders for every environment with digests only and no demo users
+    check: bash scripts/ci/camunda-chart-render.sh
+  - id: POT1-ARCH
+    claim: the proposed rule refuses Camunda in a domain class and passes a clean one
+    check: ./gradlew :archunit-no-camunda:test
+  - id: POT1-RUNNER
+    claim: the same checks pass on arm64 (ci/test-arm64, GitHub-hosted; no self-hosted runner on a public repository)
+    check: required-gates and models workflows green on the PR head
+    status: waits for the first push

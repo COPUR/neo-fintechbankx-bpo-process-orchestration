@@ -1,0 +1,3 @@
+# BPMN errors (07 O3): business outcomes a model catches. Anything not listed here is an incident.
+errors:
+  Err_ScreeningRejected: {thrownBy: lib-screening-review, caughtBy: [acc-tpp-account-opening]}

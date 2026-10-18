@@ -1,0 +1,23 @@
+# Process variable allow-list (05 §5.1, 07 O6). Lint fails on any variable a model reads or writes that is
+# not listed here, and on a name that looks like money or personal data (lint/rules/fbx-variable-allow-list.js).
+# Allowed: business keys, status and outcome enums, reason codes, DMN outputs, deadlines. Never: amounts,
+# names, IBAN, national ids, phone, e-mail, document content, message bodies, list-hit detail.
+variables:
+  applicationId: {kind: business-key, owner: acc, note: account application id; P1 business key}
+  customerId: {kind: reference, owner: cus, note: customer id reference; never the profile}
+  jurisdiction: {kind: enum, values: [AE, TR]}
+  kycStatus: {kind: enum, values: [VERIFIED, PENDING, REJECTED]}
+  kycSignal: {kind: enum, values: [RECEIVED], note: set by Msg_KycCompleted itself; the message payload is never merged}
+  screeningId: {kind: reference, owner: cmp}
+  screeningDecision: {kind: enum, values: [CLEAR, REVIEW, REJECT]}
+  sourceRef: {kind: business-key, note: the calling process's business key, passed to a library process}
+  sourceProcess: {kind: enum, note: the calling process id}
+  caseId: {kind: reference, owner: cmp, note: review case id}
+  routing: {kind: dmn-output, note: "cmp-review-routing result: reviewQueue, reviewSla, escalationQueue, escalationSla"}
+  reviewDecision: {kind: enum, values: [CLEAR, REJECT, ESCALATE, EXPIRED], note: set by the review user tasks}
+  reviewOutcome: {kind: enum, values: [CLEARED, REJECTED], note: cmp's recorded outcome}
+  rejectionReason: {kind: reason-code, values: [KYC_REJECTED, KYC_TIMEOUT, SCREENING_REJECTED]}
+  accountId: {kind: reference, owner: acc}
+  aliasOfferStatus: {kind: enum, values: [OFFERED, NOT_ELIGIBLE]}
+  purpose: {kind: enum, values: [ACCOUNT_OPENED, ACCOUNT_APPLICATION_REJECTED], note: ntf template purpose}
+  notificationRef: {kind: reference, owner: ntf}

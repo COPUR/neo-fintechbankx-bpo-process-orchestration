@@ -1,0 +1,19 @@
+{
+  "name": "fbx-bpo-model-lint",
+  "private": true,
+  "description": "BPMN and DMN lint for the bpo models: bpmnlint recommended, camunda-compat 8.10 and the fbx rules (07 §1.4)",
+  "type": "commonjs",
+  "scripts": {
+    "lint": "node lint-models.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "bpmn-moddle": "10.3.1",
+    "bpmnlint": "11.15.0",
+    "bpmnlint-plugin-camunda-compat": "2.63.0",
+    "bpmnlint-plugin-fbx": "file:./plugin",
+    "dmn-moddle": "12.2.1",
+    "js-yaml": "4.1.0",
+    "zeebe-bpmn-moddle": "2.0.0"
+  }
+}

@@ -1,0 +1,6 @@
+# Messages (07 O4/O5): the correlation key is always the business key; the event bridge sets messageId = eventId.
+# A message only wakes an instance. Every catch event maps its own constant output, so no publisher variable is
+# merged into the process; the instance re-reads the state it needs from the owning service (DevSecOps B-4).
+# Only the event bridge client (svc-bpo-event-bridge) may publish messages (docs/identity-requests.md).
+messages:
+  Msg_KycCompleted: {correlationKey: applicationId, source: evt.cus.customer.v1 (requested event), ttl: PT10M, variables: [], publisher: svc-bpo-event-bridge, then: Task_RecheckKyc re-reads cus}

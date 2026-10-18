@@ -1,0 +1,12 @@
+provider: ntf
+service: notification service (not created yet, phase 5)
+audience: none yet (no client)   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
+operations:
+  sendNotification:
+    status: requested
+    method: POST
+    path: /api/v1/notifications
+    idempotencyKey: "<applicationId>:notify-<purpose>"
+    request: {subjectRef: id, purpose: [ACCOUNT_OPENED, ACCOUNT_APPLICATION_REJECTED]}
+    response: {notificationRef: id}
+    personalData: none   # ntf resolves the channel and address from the subject; bpo never sees them

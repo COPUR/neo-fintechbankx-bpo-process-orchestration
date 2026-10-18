@@ -1,0 +1,21 @@
+provider: acc
+service: neo-fintechbankx-corebanking-accounts-ledger-service
+audience: svc-acc-accounts-ledger   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
+operations:
+  openApplicationAccount:
+    status: requested
+    method: POST
+    path: /api/v1/account-applications/{applicationId}/open
+    idempotencyKey: "<applicationId>:open"
+    pivot: true          # the one step that cannot be undone; replay returns the same account
+    caller: svc-bpo-worker-onboarding (service client, not staff)
+    response: {accountId: id}
+    replay: same key and body -> 200 with the same accountId; same key, other body -> 409 IDEMPOTENCY_KEY_REUSED
+    note: The ledger's openAccount is staff-only (BANKER/ADMIN) and takes accountType, currency and customerId; the application decides those inside acc.
+  rejectAccountApplication:
+    status: requested
+    method: POST
+    path: /api/v1/account-applications/{applicationId}/reject
+    idempotencyKey: "<applicationId>:reject"
+    request: {rejectionReason: [KYC_REJECTED, KYC_TIMEOUT, SCREENING_REJECTED]}
+    response: {}
