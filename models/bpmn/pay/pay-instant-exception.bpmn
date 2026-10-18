@@ -63,6 +63,9 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:formDefinition formId="pay-exception-ops-decision" bindingType="deployment" />
+        <zeebe:ioMapping>
+          <zeebe:output source="=exceptionDecision" target="exceptionDecision" />
+        </zeebe:ioMapping>
         <zeebe:assignmentDefinition candidateGroups="=[exceptionRouting.opsQueue]" />
         <zeebe:taskSchedule dueDate="=now() + duration(exceptionRouting.opsSla)" />
       </bpmn:extensionElements>
@@ -89,6 +92,9 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:formDefinition formId="pay-exception-supervisor-decision" bindingType="deployment" />
+        <zeebe:ioMapping>
+          <zeebe:output source="=exceptionDecision" target="exceptionDecision" />
+        </zeebe:ioMapping>
         <zeebe:assignmentDefinition candidateGroups="=[exceptionRouting.supervisorQueue]" />
         <zeebe:taskSchedule dueDate="=now() + duration(exceptionRouting.supervisorSla)" />
       </bpmn:extensionElements>

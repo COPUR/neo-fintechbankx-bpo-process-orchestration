@@ -10,12 +10,17 @@ bpo:
     ntf:
       base-url: ${BPO_PROVIDER_NTF_URL}
   # No defaults that work: outside the simulator profile the worker refuses to start without an https
-  # token endpoint, its credential and a scope naming the provider audiences.
+  # token endpoint, its credential and one scope per provider. Each provider gets its own token, scoped to that
+  # provider's audience only (docs/identity-requests.md).
   auth:
     token-uri: ${BPO_AUTH_TOKEN_URI:}
     client-id: svc-bpo-worker-payments
     client-credential: ${BPO_AUTH_CLIENT_CREDENTIAL:}
-    scope: ${BPO_AUTH_SCOPE:}
+    scopes:
+      psg-tr: ${BPO_AUTH_SCOPE_PSG_TR:}
+      acc: ${BPO_AUTH_SCOPE_ACC:}
+      pay: ${BPO_AUTH_SCOPE_PAY:}
+      ntf: ${BPO_AUTH_SCOPE_NTF:}
 # The engine address and auth come from the environment (CAMUNDA_CLIENT_MODE, CAMUNDA_CLIENT_REST_ADDRESS,
 # CAMUNDA_CLIENT_GRPC_ADDRESS, CAMUNDA_CLIENT_AUTH_*); the chart sets them. The worker runs only in the cluster of
 # the jurisdiction it serves (C8-K4); the TR deployment is the one that reaches psg-tr.
