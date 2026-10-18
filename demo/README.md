@@ -11,7 +11,7 @@ system is involved, and every payment id is synthetic (`demo-tr-...`). This is P
 `programmes/poc/tr-fast/scope.md`: it shows the process, not the ledger.
 
 **Not the target topology.** Camunda runs as one pod with in-memory H2 storage, the arrangement the process
-tests use. Dev and production use the pinned chart in `deploy/camunda-platform/` with OIDC and strict mTLS.
+tests use. Dev and production use the pinned chart in `deploy/camunda-platform/` with OIDC.
 
 ## Run
 

@@ -20,10 +20,9 @@ esac
 
 # Never a shared cluster: the API server has to be on this machine.
 server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-case "$server" in
-  https://127.0.0.1:*|https://localhost:*|https://\[::1\]:*) ;;
-  *) echo "refusing: the current context's API server ($server) is not on this machine" >&2; exit 1 ;;
-esac
+if ! [[ "$server" =~ ^https://(127\.0\.0\.1|localhost|\[::1\]):[0-9]{1,5}/?$ ]]; then
+  echo "refusing: the current context's API server ($server) is not on this machine" >&2; exit 1
+fi
 
 ./gradlew -q :payments-demo:bootJar
 docker build -q -t bpo-payments-demo:local -f demo/payments-demo/Dockerfile demo/payments-demo
