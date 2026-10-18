@@ -8,7 +8,8 @@ it; the identity owner adds the clients there. Authentication of worker calls is
 |---|---|---|---|
 | `camunda-orchestration` | confidential, authorization code + client credentials | the orchestration cluster (Operate, Tasklist, Admin, REST/gRPC) | audience `camunda-orchestration-api`; secret in `camunda-orchestration-oidc/client-secret` |
 | `svc-bpo-worker-onboarding` | service, client credentials | onboarding job workers | engine: activate and complete jobs of the onboarding job types only, no process start, no message publish. Providers: one scope per audience (below); its `azp` on each provider's caller allow-list |
-| `svc-bpo-event-bridge` | service, client credentials | the event bridge (later) | engine: message publish only. It is the only client allowed to publish `Msg_KycCompleted` and every later message |
+| `svc-bpo-worker-payments` | service, client credentials | payments job workers (TR cluster first) | engine: activate and complete jobs of the payments job types only, no process start, no message publish. Providers: one scope per audience (below); its `azp` on each provider's caller allow-list |
+| `svc-bpo-event-bridge` | service, client credentials | the event bridge (later) | engine: message publish only. It is the only client allowed to publish `Msg_KycCompleted`, `Msg_SchemeStatusReported` and every later message |
 | `svc-bpo-ci-deployer` | service, client credentials | model deployment from `main` (later) | engine: deployment only |
 | `svc-bpo-process` | service | `bpo-process-api` (later) | engine: process start and user task permissions |
 
@@ -34,3 +35,15 @@ Caller allow-list entries the providers add (`azp` values). Only the onboarding 
 | cus | `svc-cus-profile-kyc` | `svc-bpo-worker-onboarding` |
 | cmp | `svc-cmp-evidence` | `svc-bpo-worker-onboarding` |
 | acc | `svc-acc-accounts-ledger` | `svc-bpo-worker-onboarding` |
+
+Provider audiences for `svc-bpo-worker-payments` (P2, `docs/packages/tr-fast.md`):
+
+| Provider | Audience | Operations (contracts/expectations) | `azp` to allow |
+|---|---|---|---|
+| pay | `svc-pay-initiation-settlement` | recordExceptionDecision, markExceptionSettled, markExceptionRejected | `svc-bpo-worker-payments` |
+| acc | `svc-acc-accounts-ledger` | captureHold, releaseHold | `svc-bpo-worker-payments` |
+| psg-tr | none yet (`svc-psg-tr` with the gateway) | getFastInstructionStatus | `svc-bpo-worker-payments` |
+| ntf | none yet | sendNotification | `svc-bpo-worker-payments` |
+
+Groups for user tasks, from `pay-exception-routing`: `pay-tr-fast-ops`, `pay-tr-fast-supervisor`, `pay-ops-l1`,
+`pay-ops-l2`.

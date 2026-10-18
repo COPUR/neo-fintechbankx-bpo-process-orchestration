@@ -6,7 +6,7 @@ operations:
     status: requested
     method: POST
     path: /api/v1/notifications
-    idempotencyKey: "<applicationId>:notify-<purpose>"
-    request: {subjectRef: id, purpose: [ACCOUNT_OPENED, ACCOUNT_APPLICATION_REJECTED]}
+    idempotencyKey: "<applicationId or paymentId>:notify-<purpose>"
+    request: {subjectRef: id, purpose: [ACCOUNT_OPENED, ACCOUNT_APPLICATION_REJECTED, PAYMENT_SETTLED, PAYMENT_REJECTED]}
     response: {notificationRef: id}
     personalData: none   # ntf resolves the channel and address from the subject; bpo never sees them

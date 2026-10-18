@@ -19,3 +19,22 @@ operations:
     idempotencyKey: "<applicationId>:reject"
     request: {rejectionReason: [KYC_REJECTED, KYC_TIMEOUT, SCREENING_REJECTED]}
     response: {}
+  captureHold:
+    status: requested
+    method: POST
+    path: /api/v1/holds/{paymentId}/capture
+    idempotencyKey: "<paymentId>:capture"
+    pivot: true          # P2: the journal entry (customer account debit, FAST TCMB settlement account credit, 08 §2.1 step 6)
+    caller: svc-bpo-worker-payments (service client, not staff)
+    response: {journalRef: id}
+    replay: same key and body -> 200 with the same journalRef; same key, other body -> 409 IDEMPOTENCY_KEY_REUSED
+    expired: 410 HOLD_EXPIRED when acc already let the hold lapse (05 §6.4) -> incident, an operator decides
+    note: The hold is the one pay placed for the payment (F5-K3, holds in ledger); the amount and accounts are acc's and pay's, never the process's.
+  releaseHold:
+    status: requested
+    method: POST
+    path: /api/v1/holds/{paymentId}/release
+    idempotencyKey: "<paymentId>:release"
+    caller: svc-bpo-worker-payments (service client, not staff)
+    response: {}
+    replay: releasing a released or lapsed hold answers 200 (05 §7 point 2, a compensation that has nothing to undo succeeds)

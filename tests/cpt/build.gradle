@@ -1,7 +1,8 @@
-description = 'CPT - Camunda Process Test suites for the models, run against the real onboarding workers and the domain simulator'
+description = 'CPT - Camunda Process Test suites for the models, run against the real worker families and the domain simulator'
 
 dependencies {
     testImplementation project(':bpo-worker-onboarding')
+    testImplementation project(':bpo-worker-payments')
     testImplementation project(':domain-simulator')
     testImplementation 'io.camunda:camunda-process-test-spring'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
