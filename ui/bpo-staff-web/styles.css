@@ -43,6 +43,7 @@ td.actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .facts dt { font-weight: 600; }
 .note, .warning { border-left: 4px solid var(--accent); padding: .5rem 1rem; }
 .warning { border-color: var(--warn); }
+.new-tasks:not(:empty) { border-left: 4px solid var(--accent); padding: .5rem 1rem; margin: .5rem 0; }
 .alerts:not(:empty) { margin: 1rem; padding: .75rem 1rem; border: 2px solid var(--danger); color: var(--danger); border-radius: 6px; }
 .buttons { display: flex; gap: .5rem; margin-top: 1rem; }
 .confirm { margin-top: 1rem; padding: 1rem; border: 2px solid var(--warn); border-radius: 6px; }

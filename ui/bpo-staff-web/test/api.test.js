@@ -58,4 +58,12 @@ test('refusals come back as their code; 401 is a lost session; a network failure
   const broken = createApi({ baseUrl: 'https://api.example/', key: await createDpopKey(), accessToken: () => 't',
     fetchImpl: async () => { throw new TypeError('offline'); } });
   await assert.rejects(broken.me(), (e) => e.code === 'ENGINE_UNAVAILABLE');
+  await assert.rejects(broken.decide('compliance-analyst', '7', 'CLEAR'), (e) => e.code === 'OUTCOME_UNKNOWN');
+  const { api: gateway } = await api([{ status: 504, body: { code: 'OUTCOME_UNKNOWN' } }]);
+  await assert.rejects(gateway.decide('compliance-analyst', '7', 'CLEAR'), (e) => e.status === 504 && e.code === 'OUTCOME_UNKNOWN');
+  // A bare 5xx from a gateway: unknown for a write, plain failure for a read; the server's own 503 code stays.
+  const { api: bare } = await api([{ status: 502 }, { status: 502 }, { status: 503, body: { code: 'ENGINE_UNAVAILABLE' } }]);
+  await assert.rejects(bare.claim('compliance-analyst', '7'), (e) => e.code === 'OUTCOME_UNKNOWN');
+  await assert.rejects(bare.me(), (e) => e.code === 'UNKNOWN');
+  await assert.rejects(bare.decide('compliance-analyst', '7', 'CLEAR'), (e) => e.code === 'ENGINE_UNAVAILABLE');
 });

@@ -1,6 +1,7 @@
 # Staff task UX: one screen set per human actor
 
-Status: round 1. Built: the controller layer (`services/bpo-process-api`) and the presentation layer
+Status: round 2 (four eyes shown before deciding, unknown outcomes, confirmations that name the record, filter
+counts and a new-task notice, task measures). Built: the controller layer (`services/bpo-process-api`) and the presentation layer
 (`ui/bpo-staff-web`) for the four actors that have user tasks in this repository's models (the screening review
 and the TR FAST payment exception). The other actors below are designed here so their screens follow the same
 pattern when their models arrive.
@@ -12,14 +13,14 @@ pattern when their models arrive.
 | Camunda holds ids, enums and deadlines only (ADR 0001) | A task shows its type, number, assignment, due date and the owning service's record id. Detail (screening hits, payment data, names) is read in the owning service's own screen, opened from a link. |
 | A user writes the decision and nothing else | The decision form has one radio group. Ids are shown as text, never as inputs. The API accepts `{"decision": "..."}` only and refuses any other field (`BODY_NOT_ALLOWED`); it writes only the task type's decision variable. |
 | Staff calls are DPoP (ADR 0002, user calls through a UI) | Sign-in is OIDC with PKCE; the browser holds a non-extractable key; every call carries a fresh proof. A token copied out of the browser is refused without the key. |
-| Fail closed | When the engine does not answer, the user is told nothing was recorded, and nothing was. |
-| Four eyes in the API | Whoever completed the maker task of a case cannot complete its checker task, even when they hold both queues. |
+| Say what is known | When the engine refuses or cannot be reached before the write, the user is told nothing was recorded. When the write went out and the answer was lost (`OUTCOME_UNKNOWN`), the user is told the outcome is unknown; the screen reads the task once to find out and never resends on its own. |
+| Four eyes in the API | Whoever held the maker task of a case, whether they completed it or let its deadline pass, cannot complete its checker task. The detail screen shows the block before the user decides. A person holding both queues is still a separation-of-duties gap that identity should close (`docs/identity-requests.md`). |
 | One actor, one set of routes | `/api/v1/actors/<actor>/tasks...` per actor, each with its own controller; a user sees an actor's screens only when the token carries one of its queue groups. |
 
 ## 2. Human actors and their tasks
 
 Sources: the BPMN models and forms in `models/` (the screening review on `main` at a2a7544; the TR FAST package
-from commit 78964bb, the base of this change), and the phase 5 design, which is not in this repository. The first
+from commit 78964bb, the base of this change), and the programme's phase 5 process design, which is kept outside this repository. The first
 four rows are served now.
 
 | Actor | Process / user task | State | Queue groups (routing DMN) | Decisions | Four eyes | Screens |
@@ -53,30 +54,39 @@ flowchart LR
   L -->|Claim| D
   D -->|Claim| D
   D -->|Release| L
-  D -->|Choose decision| C{"Irreversible?<br/>REJECT, ESCALATE"}
+  D -->|Choose decision| C{"Anything but CLEAR?<br/>rejects, moves money,<br/>hands the task on"}
   C -->|no| S["Record"]
   C -->|yes| Q["Confirm in place"] -->|Yes| S
   Q -->|Cancel| D
   S -->|204| L
   S -->|refused| E["Message in the alert region<br/>nothing recorded"] --> D
+  S -->|answer lost| U["Read the task once"]
+  U -->|closed| L
+  U -->|still mine| D
 ```
 
 **Task list.** A table with a caption, one row per task: task type, task number, assignment (Unassigned, Mine,
 Held by another colleague; never the colleague's name), SLA badge (Overdue, Due within an hour, On track, No due
-date) and due time. Overdue rows come first. Filters: assigned to me (default), unassigned in my queues, all.
-Claim is offered only on unassigned rows. Refresh is a button; the list never moves under the user's cursor.
+date) and due time. Overdue rows come first. Filters: assigned to me (default), unassigned in my queues, all;
+each label carries its count. Claim is offered only on unassigned rows. Refresh is a button. Every minute,
+while the tab is visible, the screen looks for new tasks and says how many arrived in a polite status line with
+an "Update the list" button; the table itself only changes when the user asks, so it never moves under the
+cursor.
 
 **Task detail.** Heading "<task type> · <number>", a definition list (assignment, due, reference), the hint
 that the task holds no detail, and the link to the owning screen ("Open the case in the compliance case view",
 "Open the payment in the payments operations view") built from a configured https template per reference kind
 and the reference id (a non-plain id gets no link). The user claims, then decides; release puts
-the task back in the queue.
+the task back in the queue. When the reference cannot be read, or four eyes keeps the user from this task, the
+decision form is not shown at all; the only action is Release.
 
 **Decision.** One fieldset with a legend and one radio per decision the server allows, labelled per task type.
-Every decision except a plain CLEAR asks for confirmation in place, with the consequence in words (rejects,
-moves money, hands the task on); focus moves to "Yes, record it". On success the list returns with "Your
+Every decision except a plain CLEAR asks for confirmation in place. The text names the record ("Payment
+PAY-1 will be rejected and its held amount released") and the consequence; focus moves to the button "Yes,
+record it for PAY-1", so a user working in several tabs sees which record they are deciding. On success the list returns with "Your
 decision is recorded" announced. A UI test reads the API's task catalogue and fails when a decision has no
-label or no confirmation in either language.
+label or no confirmation in either language, and another fails when a confirmation does not name the record or
+the two languages use different placeholders.
 
 ## 4. States and messages
 
@@ -86,11 +96,12 @@ label or no confirmation in either language.
 | Empty view | no task in the filter | "Bu görünümde görev yok" / "No tasks in this view" | change filter, refresh |
 | Claimed by other | someone claimed first (`TASK_CLAIMED_BY_OTHER`, 409) | "Görevi az önce başka biri üstlendi" | back to list |
 | Not yours | decide or release without the claim (`TASK_NOT_ASSIGNED_TO_YOU`, 409) | "Önce üstlenin" | claim |
-| Four eyes | user escalated this case (`FOUR_EYES_REQUIRED`, 409) | "Kararı başka bir kıdemli personel vermeli" | release |
+| Four eyes | user held the maker task, in any state (shown on the detail as `fourEyesBlocked`; `FOUR_EYES_REQUIRED`, 409, if sent anyway) | "Dört göz kuralı gereği bu kararı veremezsiniz" | release (the only button) |
 | Closed or not visible | SLA timer closed the task, another decision landed, or the key is outside the user's queues (`TASK_NOT_FOUND`, 404, one answer for all) | "Görev bulunamadı ya da kapandı" | refresh |
-| Engine down | engine timeout, 5xx, unreadable answer (`ENGINE_UNAVAILABLE`, 503) | "Hiçbir şey kaydedilmedi" | retry later |
+| Engine down | no connection, a refused or unreadable answer, a read that timed out (`ENGINE_UNAVAILABLE`, 503) | "Hiçbir şey kaydedilmedi" | retry later |
+| Outcome unknown | a claim, release or decision was sent and its answer was lost: timeout, 5xx or 429 after sending (`OUTCOME_UNKNOWN`, 504) | after one re-read: "Görev kapanmış: kararınız büyük olasılıkla kaydedildi" / "Kaydedilmedi, yeniden kaydedebilirsiniz" / "Sonuç hâlâ bilinmiyor, tekrar göndermeyin" | follows the re-read; never an automatic resend |
 | Session ended | 401 | "Oturumunuz sona erdi" | sign in; the DPoP key is forgotten |
-| Reference unreadable | the reference variable is missing or not a plain id | "Vaka numarası okunamadı" | tell operations before deciding |
+| Reference unreadable | the reference variable is missing or not a plain id | "Kayıt numarası okunamadı, karar formu gösterilmiyor" | tell operations and release |
 
 SLA escalation is the model's: the analyst task's boundary timer moves the case to the senior queue and the
 senior timer closes it as expired. The UI only shows the clock; it never extends or skips a deadline.
@@ -102,17 +113,21 @@ case in the compliance case view; returns and records CLEAR, REJECT (confirm) or
 case leaves their hands).
 
 **Senior compliance.** Same list, escalated cases only. The detail shows the four-eyes note. Decisions are
-CLEAR or REJECT; a case the user escalated as analyst is refused with the four-eyes message, so a person who
-holds both queues still needs a colleague.
+CLEAR or REJECT. On a case whose analyst task the user held, the detail shows the four-eyes block and only
+Release, so a person who holds both queues still needs a colleague.
 
 **Payments operations.** The list shows instant payment exceptions with their 30-minute (TR FAST) or one-hour
 SLA. The user claims one, opens the payment in the payments operations view, reads the scheme record and records
 SETTLED, REJECTED or ESCALATE. Every choice is confirmed in place: SETTLED says the held amount will be captured,
-REJECTED says it will be released, ESCALATE says the payment leaves their hands. `pay` checks the decision
-against the gateway's record; the screen says so.
+REJECTED says it will be released, ESCALATE says the payment leaves their hands. A check of the decision against
+the gateway's own record by `pay` is requested from its owner and not yet in place; until
+it is, the confirmation asks the user to confirm only what the scheme record says, and the screen claims no
+check.
 
 **Payments supervisor.** Escalated payments and those whose operations SLA expired. SETTLED or REJECTED only,
-both confirmed; a payment the user escalated as operations is refused with the four-eyes message.
+both confirmed. On a payment whose operations task the user held, the detail shows the four-eyes block and only
+Release. A third outcome for a scheme record that stays unclear is being added to the model by the TR FAST
+package; the screen gains its label when the model carries it.
 
 ## 6. Accessibility (WCAG 2.2 AA)
 
@@ -174,5 +189,9 @@ sequenceDiagram
   already refuses them; the mapping is the engine-side half and belongs to the model owner.
 - Owning screens: the compliance case view and the payments operations view are not part of this repository;
   their URL templates are configuration (`referenceViews` in `config.json`).
-- Four eyes reads who completed the maker task from the engine's task history; history retention must outlast
-  the senior SLA.
+- Four eyes reads who held the maker task, in any state, from the engine's task history; history retention must
+  outlast the checker SLA.
+- Measures: `bpo.staff.task.claims`, `.releases`, `.decisions` (actor, task type, decision, within or after
+  SLA), `.age` (creation to decision) and `.refusals` (actor, reason) go to Micrometer through the
+  `TaskEvents` port; no user id, task key or reference is a tag. Dashboards belong to the observability repo.
+- Paging of long queues and coded decision reasons come in the next round (`docs/ux/staff-task-research.md`).

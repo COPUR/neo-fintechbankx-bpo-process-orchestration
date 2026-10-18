@@ -36,6 +36,7 @@ public class TaskProblems {
             case DECISION_NOT_ALLOWED -> HttpStatus.UNPROCESSABLE_CONTENT;
             case BODY_NOT_ALLOWED -> HttpStatus.BAD_REQUEST;
             case ENGINE_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
+            case OUTCOME_UNKNOWN -> HttpStatus.GATEWAY_TIMEOUT;
         };
     }
 

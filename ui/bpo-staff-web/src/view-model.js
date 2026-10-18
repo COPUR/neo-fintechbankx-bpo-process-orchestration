@@ -14,6 +14,17 @@ export function slaState(dueAt, now = Date.now()) {
   return left < DUE_SOON_MS ? 'due-soon' : 'on-track';
 }
 
+/** How many tasks each filter shows, for the filter labels. */
+export function filterCounts(tasks) {
+  return Object.fromEntries(FILTERS.map((f) => [f, filterTasks(tasks, f).length]));
+}
+
+/** Tasks in {@code fresh} that the shown list does not have yet; the list itself is not redrawn by a poll. */
+export function newTaskCount(shown, fresh) {
+  const known = new Set(shown.map((x) => String(x.taskKey)));
+  return fresh.filter((x) => !known.has(String(x.taskKey))).length;
+}
+
 export function filterTasks(tasks, filter) {
   switch (filter) {
     case 'mine': return tasks.filter((x) => x.assignment === 'MINE');
@@ -46,23 +57,50 @@ function label(lang, key) {
 
 /**
  * The decisions to offer: those the server allows for this task type that the UI has a label for. A decision
- * that moves money, rejects or hands the task on has a confirmation text and is asked twice.
+ * that moves money, rejects or hands the task on has a confirmation text and is asked twice; the text and its
+ * button name the record the decision is about and what follows from it.
  */
 export function decisionOptions(task, lang) {
+  const params = { reference: task.reference ?? '—' };
   return (task.decisions ?? [])
-    .map((d) => ({ value: d, label: label(lang, `decision.${task.taskType}.${d}`), confirm: label(lang, `confirm.${task.taskType}.${d}`) }))
+    .map((d) => {
+      const confirm = label(lang, `confirm.${task.taskType}.${d}`);
+      return {
+        value: d,
+        label: label(lang, `decision.${task.taskType}.${d}`),
+        confirm: confirm === null ? null : t(lang, `confirm.${task.taskType}.${d}`, params),
+        confirmLabel: confirm === null ? null : t(lang, 'action.confirmFor', params),
+      };
+    })
     .filter((o) => o.label !== null);
 }
 
-/** What the detail screen lets the user do now. */
+/**
+ * What the detail screen lets the user do now. A decision is offered only on a task the user holds, with a
+ * readable reference, and that four eyes does not keep from the user; otherwise the user can only release it.
+ */
 export function detailState(task) {
+  const mine = task.assignment === 'MINE';
+  const fourEyesBlocked = task.fourEyesBlocked === true;
+  const referenceMissing = !task.reference;
   return {
     canClaim: task.assignment === 'UNASSIGNED',
-    canRelease: task.assignment === 'MINE',
-    canDecide: task.assignment === 'MINE',
+    canRelease: mine,
+    canDecide: mine && !fourEyesBlocked && !referenceMissing,
     heldByOther: task.assignment === 'OTHER',
-    referenceMissing: !task.reference,
+    referenceMissing,
+    fourEyesBlocked,
   };
+}
+
+/**
+ * After OUTCOME_UNKNOWN the client reads the task once and never resends on its own. {@code result} is either
+ * {task} from that read or {code} of its failure; the answer is the message key to show.
+ */
+export function unknownOutcomeMessage(result) {
+  if (result?.task) return result.task.assignment === 'MINE' ? 'outcome.notRecorded' : 'outcome.stillOpen';
+  if (result?.code === 'TASK_NOT_FOUND') return 'outcome.closed';
+  return 'outcome.unreachable';
 }
 
 /** The link to the owning service's screen for this reference kind (caseId, paymentId); only a plain id goes in. */

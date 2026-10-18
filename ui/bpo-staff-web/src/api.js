@@ -32,7 +32,8 @@ export function createApi({ baseUrl, key, accessToken, fetchImpl = globalThis.fe
       response = await fetchImpl(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body),
         credentials: 'omit', redirect: 'error' });
     } catch {
-      throw new ApiError(0, 'ENGINE_UNAVAILABLE');
+      // A read that failed changed nothing; a write may have reached the server before the answer was lost.
+      throw new ApiError(0, method === 'GET' ? 'ENGINE_UNAVAILABLE' : 'OUTCOME_UNKNOWN');
     }
     if (response.status === 401) throw new ApiError(401, 'SESSION');
     if (!response.ok) {
@@ -41,6 +42,8 @@ export function createApi({ baseUrl, key, accessToken, fetchImpl = globalThis.fe
         const problem = await response.json();
         if (typeof problem.code === 'string' && /^[A-Z_]{1,40}$/.test(problem.code)) code = problem.code;
       } catch { /* not a problem body */ }
+      // A gateway in front of the API may answer a write with a bare 5xx after the write went through.
+      if (code === 'UNKNOWN' && method !== 'GET' && response.status >= 500) code = 'OUTCOME_UNKNOWN';
       throw new ApiError(response.status, code);
     }
     return response.status === 204 ? null : response.json();

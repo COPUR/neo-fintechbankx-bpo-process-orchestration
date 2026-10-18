@@ -4,11 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.bank.bpo.processapi.FakeUserTasks;
+import com.bank.bpo.processapi.application.port.TaskEvents;
 import com.bank.bpo.processapi.domain.Actor;
 import com.bank.bpo.processapi.domain.StaffUser;
 import com.bank.bpo.processapi.domain.TaskRefusal;
 import com.bank.bpo.processapi.domain.TaskRefusal.Reason;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -154,9 +161,48 @@ class TaskInboxTest {
         assertThat(engine.completions).doesNotContainKey(11L);
 
         inbox.release(Actor.COMPLIANCE_SENIOR, BOTH, 11);
-        inbox.claim(Actor.COMPLIANCE_SENIOR, OFFICER, 11);
+        assertThat(inbox.claim(Actor.COMPLIANCE_SENIOR, OFFICER, 11).fourEyesBlocked()).isFalse();
         inbox.decide(Actor.COMPLIANCE_SENIOR, OFFICER, 11, Map.of("decision", "CLEAR"));
         assertThat(engine.completions.get(11L)).containsExactly(Map.entry("reviewDecision", "CLEAR"));
+    }
+
+    @Test
+    void lettingTheMakerTaskExpireDoesNotOpenTheCheckerTaskToTheSamePerson() {
+        // DevSecOps S-1 on 0ef1e8d: claim the analyst task, let its SLA expire, then decide the senior task alone.
+        engine.add(30, LIB, "Task_AnalystReview", null, 3000, "cmp-tr-onboarding-l1");
+        inbox.claim(Actor.COMPLIANCE_ANALYST, BOTH, 30);
+        engine.expire(30);
+        engine.add(31, LIB, "Task_SeniorReview", null, 3000, "cmp-tr-compliance-officer");
+        assertThat(inbox.claim(Actor.COMPLIANCE_SENIOR, BOTH, 31).fourEyesBlocked()).isTrue();
+        assertThat(inbox.list(Actor.COMPLIANCE_SENIOR, BOTH)).allMatch(v -> !v.fourEyesBlocked());
+
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_SENIOR, BOTH, 31, Map.of("decision", "CLEAR")), Reason.FOUR_EYES_REQUIRED);
+        assertThat(engine.completions).doesNotContainKey(31L);
+    }
+
+    @Test
+    void claimsDecisionsAndRefusalsAreReportedWithoutIdsOrNames() {
+        List<String> seen = new ArrayList<>();
+        TaskEvents events = new TaskEvents() {
+            public void claimed(Actor a, String t) { seen.add("claimed " + a.id() + " " + t); }
+            public void released(Actor a, String t) { seen.add("released " + a.id() + " " + t); }
+            public void decided(Actor a, String t, String d, Duration age, boolean late) {
+                seen.add("decided " + a.id() + " " + t + " " + d + " " + age + " late=" + late);
+            }
+            public void refused(Actor a, Reason r) { seen.add("refused " + a.id() + " " + r); }
+        };
+        TaskInbox measured = new TaskInbox(engine, new QueueGroups(Map.of(Actor.COMPLIANCE_ANALYST, Set.of("cmp-tr-onboarding-l1"))),
+            events, Clock.fixed(Instant.parse("2026-10-18T15:00:00Z"), ZoneOffset.UTC));
+
+        measured.claim(Actor.COMPLIANCE_ANALYST, ANALYST, 1);
+        assertThatThrownBy(() -> measured.claim(Actor.COMPLIANCE_ANALYST, OTHER_ANALYST, 1)).isInstanceOf(TaskRefusal.class);
+        measured.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR"));
+
+        // Task 1 was created 10:00:01 and due 13:59:59 (FakeUserTasks), decided at 15:00.
+        assertThat(seen).containsExactly(
+            "claimed compliance-analyst Task_AnalystReview",
+            "refused compliance-analyst TASK_CLAIMED_BY_OTHER",
+            "decided compliance-analyst Task_AnalystReview CLEAR PT4H59M59S late=true");
     }
 
     @Test

@@ -8,6 +8,7 @@ import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_CLAIMED_BY_
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_NOT_ASSIGNED_TO_YOU;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_NOT_FOUND;
 
+import com.bank.bpo.processapi.application.port.TaskEvents;
 import com.bank.bpo.processapi.application.port.UserTaskPort;
 import com.bank.bpo.processapi.domain.Actor;
 import com.bank.bpo.processapi.domain.EngineTask;
@@ -15,12 +16,16 @@ import com.bank.bpo.processapi.domain.StaffUser;
 import com.bank.bpo.processapi.domain.TaskRefusal;
 import com.bank.bpo.processapi.domain.TaskType;
 import com.bank.bpo.processapi.domain.TaskTypes;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
@@ -28,6 +33,7 @@ import java.util.regex.Pattern;
  * from the engine and checks, in this order: the user acts as the actor, the task is open, of a kind this actor
  * works and in one of the user's queues. Anything else is TASK_NOT_FOUND, so a key outside the user's queues
  * reveals nothing. A decision writes one variable, the task type's decision variable, and nothing else.
+ * Claims, releases, decisions and refusals are reported to {@link TaskEvents} for the screens' measures.
  */
 public final class TaskInbox {
 
@@ -37,10 +43,18 @@ public final class TaskInbox {
 
     private final UserTaskPort tasks;
     private final QueueGroups queues;
+    private final TaskEvents events;
+    private final Clock clock;
 
     public TaskInbox(UserTaskPort tasks, QueueGroups queues) {
+        this(tasks, queues, TaskEvents.NONE, Clock.systemUTC());
+    }
+
+    public TaskInbox(UserTaskPort tasks, QueueGroups queues, TaskEvents events, Clock clock) {
         this.tasks = tasks;
         this.queues = queues;
+        this.events = events;
+        this.clock = clock;
     }
 
     public List<Actor> actorsOf(StaffUser user) {
@@ -49,12 +63,16 @@ public final class TaskInbox {
 
     /** Open tasks of the actor in the user's queues, oldest due date first; tasks held by others are included. */
     public List<TaskView> list(Actor actor, StaffUser user) {
+        return reported(actor, () -> listChecked(actor, user));
+    }
+
+    private List<TaskView> listChecked(Actor actor, StaffUser user) {
         Set<String> groups = groupsOrRefuse(actor, user);
         List<TaskView> views = new ArrayList<>();
         for (TaskType type : TaskTypes.of(actor)) {
             for (EngineTask task : tasks.openTasks(type.processDefinitionId(), type.elementId(), groups, LIMIT)) {
                 if (visible(task, type, groups)) {
-                    views.add(view(task, type, user, null));
+                    views.add(view(task, type, user, null, false));
                 }
             }
         }
@@ -65,29 +83,40 @@ public final class TaskInbox {
 
     /** One task with its read-only reference to the owning service's record. */
     public TaskView read(Actor actor, StaffUser user, long taskKey) {
+        return reported(actor, () -> readChecked(actor, user, taskKey));
+    }
+
+    private TaskView readChecked(Actor actor, StaffUser user, long taskKey) {
         Visible v = visibleOrRefuse(actor, user, taskKey);
         String reference = tasks.stringVariable(taskKey, v.type.referenceVariable())
             .filter(r -> REFERENCE.matcher(r).matches())
             .orElse(null);
-        return view(v.task, v.type, user, reference);
+        return view(v.task, v.type, user, reference, heldMaker(v, user));
     }
 
     public TaskView claim(Actor actor, StaffUser user, long taskKey) {
-        Visible v = visibleOrRefuse(actor, user, taskKey);
-        if (v.task.assignee() == null) {
-            tasks.assign(taskKey, user.id());
-        } else if (!user.id().equals(v.task.assignee())) {
-            throw new TaskRefusal(TASK_CLAIMED_BY_OTHER);
-        }
-        return read(actor, user, taskKey);
+        return reported(actor, () -> {
+            Visible v = visibleOrRefuse(actor, user, taskKey);
+            if (v.task.assignee() == null) {
+                tasks.assign(taskKey, user.id());
+                events.claimed(actor, v.type.elementId());
+            } else if (!user.id().equals(v.task.assignee())) {
+                throw new TaskRefusal(TASK_CLAIMED_BY_OTHER);
+            }
+            return readChecked(actor, user, taskKey);
+        });
     }
 
     public void release(Actor actor, StaffUser user, long taskKey) {
-        Visible v = visibleOrRefuse(actor, user, taskKey);
-        if (!user.id().equals(v.task.assignee())) {
-            throw new TaskRefusal(TASK_NOT_ASSIGNED_TO_YOU);
-        }
-        tasks.unassign(taskKey);
+        reported(actor, () -> {
+            Visible v = visibleOrRefuse(actor, user, taskKey);
+            if (!user.id().equals(v.task.assignee())) {
+                throw new TaskRefusal(TASK_NOT_ASSIGNED_TO_YOU);
+            }
+            tasks.unassign(taskKey);
+            events.released(actor, v.type.elementId());
+            return null;
+        });
     }
 
     /**
@@ -95,21 +124,42 @@ public final class TaskInbox {
      * {@code decision} and nothing else, so no caller can write an id or any other variable.
      */
     public void decide(Actor actor, StaffUser user, long taskKey, Map<String, ?> body) {
-        if (body == null || body.size() != 1 || !(body.get("decision") instanceof String decision)) {
-            throw new TaskRefusal(BODY_NOT_ALLOWED);
+        reported(actor, () -> {
+            if (body == null || body.size() != 1 || !(body.get("decision") instanceof String decision)) {
+                throw new TaskRefusal(BODY_NOT_ALLOWED);
+            }
+            Visible v = visibleOrRefuse(actor, user, taskKey);
+            if (!user.id().equals(v.task.assignee())) {
+                throw new TaskRefusal(TASK_NOT_ASSIGNED_TO_YOU);
+            }
+            if (!v.type.allows(decision)) {
+                throw new TaskRefusal(DECISION_NOT_ALLOWED);
+            }
+            // Four eyes: whoever held the maker task, completed or let it expire, cannot decide the checker task.
+            if (heldMaker(v, user)) {
+                throw new TaskRefusal(FOUR_EYES_REQUIRED);
+            }
+            tasks.complete(taskKey, Map.of(v.type.decisionVariable(), decision));
+            Instant now = clock.instant();
+            events.decided(actor, v.type.elementId(), decision,
+                v.task.creationDate() == null ? null : Duration.between(v.task.creationDate(), now),
+                v.task.dueDate() != null && now.isAfter(v.task.dueDate()));
+            return null;
+        });
+    }
+
+    private boolean heldMaker(Visible v, StaffUser user) {
+        return v.type.maker().isPresent()
+            && tasks.assigneesOf(v.task.processInstanceKey(), v.type.maker().get()).contains(user.id());
+    }
+
+    private <T> T reported(Actor actor, Supplier<T> work) {
+        try {
+            return work.get();
+        } catch (TaskRefusal refusal) {
+            events.refused(actor, refusal.reason());
+            throw refusal;
         }
-        Visible v = visibleOrRefuse(actor, user, taskKey);
-        if (!user.id().equals(v.task.assignee())) {
-            throw new TaskRefusal(TASK_NOT_ASSIGNED_TO_YOU);
-        }
-        if (!v.type.allows(decision)) {
-            throw new TaskRefusal(DECISION_NOT_ALLOWED);
-        }
-        if (v.type.maker().isPresent()
-            && tasks.completedBy(v.task.processInstanceKey(), v.type.maker().get()).contains(user.id())) {
-            throw new TaskRefusal(FOUR_EYES_REQUIRED);
-        }
-        tasks.complete(taskKey, Map.of(v.type.decisionVariable(), decision));
     }
 
     private Set<String> groupsOrRefuse(Actor actor, StaffUser user) {
@@ -139,12 +189,13 @@ public final class TaskInbox {
             && task.candidateGroups().stream().anyMatch(groups::contains);
     }
 
-    private static TaskView view(EngineTask task, TaskType type, StaffUser user, String reference) {
+    private static TaskView view(EngineTask task, TaskType type, StaffUser user, String reference,
+                                 boolean fourEyesBlocked) {
         TaskView.Assignment assignment = task.assignee() == null ? TaskView.Assignment.UNASSIGNED
             : user.id().equals(task.assignee()) ? TaskView.Assignment.MINE : TaskView.Assignment.OTHER;
         return new TaskView(task.key(), type.actor(), type.elementId(), type.processDefinitionId(), assignment,
             task.creationDate(), task.dueDate(), type.maker().isPresent(), type.decisions(),
-            type.referenceVariable(), reference);
+            type.referenceVariable(), reference, fourEyesBlocked);
     }
 
     private record Visible(EngineTask task, TaskType type) {

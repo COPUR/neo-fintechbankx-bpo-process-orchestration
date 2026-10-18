@@ -27,7 +27,7 @@ repos to keep `io.camunda` out (`docs/proposals/archunit-no-camunda.md`).
 | `services/bpo-worker-kit` | Idempotency keys, provider HTTP with status mapping, output variable filter, job error mapping. |
 | `services/bpo-worker-<family>` | One worker module per family. `onboarding` and `payments` carry code; the others have a README until their first model. |
 | `services/bpo-process-api` | Staff task API: one controller per human actor (list, claim, release, decide), DPoP only, four eyes. |
-| `ui/bpo-staff-web` | Staff web for user tasks per actor, Turkish and English (`docs/ux/staff-task-ux.md`). |
+| `ui/bpo-staff-web` | Staff web for user tasks per actor, Turkish and English (`docs/ux/staff-task-ux.md`; personas, hypotheses and wireframes in `docs/ux/staff-task-research.md`). |
 | `services/bpo-event-bridge` | Planned: the Kafka inbox/outbox bridge (ADR-019). |
 | `simulators/domain-simulator` | In-process HTTP stand-in for every provider operation the workers call. |
 | `tests/cpt` | Camunda Process Tests of every model against the real engine (Testcontainers) and the simulator. |

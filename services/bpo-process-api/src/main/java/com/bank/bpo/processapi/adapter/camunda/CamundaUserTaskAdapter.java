@@ -1,6 +1,7 @@
 package com.bank.bpo.processapi.adapter.camunda;
 
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.ENGINE_UNAVAILABLE;
+import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.OUTCOME_UNKNOWN;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_CLAIMED_BY_OTHER;
 
 import com.bank.bpo.processapi.application.port.UserTaskPort;
@@ -31,8 +32,9 @@ import tools.jackson.databind.json.JsonMapper;
  * camunda-client-java 8.10.4. The API calls as {@code svc-bpo-process} with a client-credentials token;
  * staff tokens never reach the engine.
  *
- * <p>Fail closed: a timeout, a 5xx, a 401/403 or a body the adapter cannot read is ENGINE_UNAVAILABLE and
- * nothing is assumed written.
+ * <p>Fail closed: on a read, a timeout, a 5xx, a 401/403 or an unreadable body is ENGINE_UNAVAILABLE. On a
+ * write (assign, unassign, complete), only a refused connection proves nothing was sent; a timeout or a 5xx
+ * after sending is OUTCOME_UNKNOWN, so the user is told to refresh rather than that nothing was recorded.
  */
 public final class CamundaUserTaskAdapter implements UserTaskPort {
 
@@ -100,29 +102,29 @@ public final class CamundaUserTaskAdapter implements UserTaskPort {
 
     @Override
     public void assign(long taskKey, String assignee) {
-        HttpResponse<String> response = send("POST", "v2/user-tasks/" + taskKey + "/assignment",
+        HttpResponse<String> response = write("POST", "v2/user-tasks/" + taskKey + "/assignment",
             Map.of("assignee", assignee, "allowOverride", false));
         if (response.statusCode() == 409) {
             throw new TaskRefusal(TASK_CLAIMED_BY_OTHER);
         }
-        expect(response, 204);
+        expectWritten(response);
     }
 
     @Override
     public void unassign(long taskKey) {
-        expect(send("DELETE", "v2/user-tasks/" + taskKey + "/assignee", null), 204);
+        expectWritten(write("DELETE", "v2/user-tasks/" + taskKey + "/assignee", null));
     }
 
     @Override
     public void complete(long taskKey, Map<String, String> variables) {
-        expect(send("POST", "v2/user-tasks/" + taskKey + "/completion", Map.of("variables", variables)), 204);
+        expectWritten(write("POST", "v2/user-tasks/" + taskKey + "/completion", Map.of("variables", variables)));
     }
 
     @Override
-    public Set<String> completedBy(long processInstanceKey, String elementId) {
+    public Set<String> assigneesOf(long processInstanceKey, String elementId) {
+        // No state filter: a maker task cancelled by its SLA timer keeps the assignee who let it expire.
         JsonNode body = call("POST", "v2/user-tasks/search", Map.of(
-            "filter", Map.of("processInstanceKey", Long.toString(processInstanceKey), "elementId", elementId,
-                "state", "COMPLETED"),
+            "filter", Map.of("processInstanceKey", Long.toString(processInstanceKey), "elementId", elementId),
             "page", Map.of("limit", 50)), 200);
         Set<String> assignees = new LinkedHashSet<>();
         for (JsonNode item : items(body)) {
@@ -134,22 +136,51 @@ public final class CamundaUserTaskAdapter implements UserTaskPort {
         return assignees;
     }
 
+    /** A write: a refused connection is ENGINE_UNAVAILABLE (nothing sent); any later failure is OUTCOME_UNKNOWN. */
+    private HttpResponse<String> write(String method, String path, Object body) {
+        try {
+            return client.send(request(method, path, body), HttpResponse.BodyHandlers.ofString());
+        } catch (java.net.ConnectException e) {
+            throw new TaskRefusal(ENGINE_UNAVAILABLE);
+        } catch (IOException e) {
+            throw new TaskRefusal(OUTCOME_UNKNOWN);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new TaskRefusal(OUTCOME_UNKNOWN);
+        } catch (RuntimeException e) {
+            throw new TaskRefusal(ENGINE_UNAVAILABLE);
+        }
+    }
+
+    private static void expectWritten(HttpResponse<String> response) {
+        int status = response.statusCode();
+        if (status == 204) {
+            return;
+        }
+        // 5xx and 429 come from a server that may have applied the write; 4xx refused it before applying.
+        throw new TaskRefusal(status >= 500 || status == 429 ? OUTCOME_UNKNOWN : ENGINE_UNAVAILABLE);
+    }
+
     private JsonNode call(String method, String path, Object body, int expected) {
         return read(send(method, path, body), expected);
     }
 
+    private HttpRequest request(String method, String path, Object body) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(base.resolve(path)).timeout(TIMEOUT)
+            .header("authorization", "Bearer " + token.get())
+            .header("accept", "application/json");
+        if (body == null) {
+            request.method(method, HttpRequest.BodyPublishers.noBody());
+        } else {
+            request.header("content-type", "application/json")
+                .method(method, HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
+        }
+        return request.build();
+    }
+
     private HttpResponse<String> send(String method, String path, Object body) {
         try {
-            HttpRequest.Builder request = HttpRequest.newBuilder(base.resolve(path)).timeout(TIMEOUT)
-                .header("authorization", "Bearer " + token.get())
-                .header("accept", "application/json");
-            if (body == null) {
-                request.method(method, HttpRequest.BodyPublishers.noBody());
-            } else {
-                request.header("content-type", "application/json")
-                    .method(method, HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
-            }
-            return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            return client.send(request(method, path, body), HttpResponse.BodyHandlers.ofString());
         } catch (IOException | RuntimeException e) {
             throw new TaskRefusal(ENGINE_UNAVAILABLE);
         } catch (InterruptedException e) {

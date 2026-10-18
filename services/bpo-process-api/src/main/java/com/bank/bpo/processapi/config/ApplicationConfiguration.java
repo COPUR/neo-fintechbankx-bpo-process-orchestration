@@ -1,18 +1,23 @@
 package com.bank.bpo.processapi.config;
 
 import com.bank.bpo.processapi.adapter.camunda.CamundaUserTaskAdapter;
+import com.bank.bpo.processapi.adapter.metrics.MicrometerTaskEvents;
 import com.bank.bpo.processapi.adapter.web.StaffUsers;
 import com.bank.bpo.processapi.application.QueueGroups;
 import com.bank.bpo.processapi.application.TaskInbox;
+import com.bank.bpo.processapi.application.port.TaskEvents;
 import com.bank.bpo.processapi.application.port.UserTaskPort;
 import com.bank.bpo.processapi.domain.Actor;
 import com.bank.bpo.workerkit.ClientCredentialsToken;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
 import java.time.Clock;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -34,8 +39,14 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    TaskInbox taskInbox(UserTaskPort tasks, QueueGroups queues) {
-        return new TaskInbox(tasks, queues);
+    TaskEvents taskEvents(ObjectProvider<MeterRegistry> registry) {
+        // The platform's registry when one is configured (actuator arrives with the chart); else the global one.
+        return new MicrometerTaskEvents(registry.getIfAvailable(() -> Metrics.globalRegistry));
+    }
+
+    @Bean
+    TaskInbox taskInbox(UserTaskPort tasks, QueueGroups queues, TaskEvents events) {
+        return new TaskInbox(tasks, queues, events, Clock.systemUTC());
     }
 
     @Bean

@@ -20,6 +20,19 @@ test('Turkish and English have the same keys and no empty label', () => {
   }
 });
 
+test('Turkish and English use the same placeholders in every label', () => {
+  const names = (text) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+  for (const key of Object.keys(MESSAGES.tr)) assert.deepEqual(names(MESSAGES.tr[key]), names(MESSAGES.en[key]), key);
+});
+
+test('every confirmation names the record it is about', () => {
+  for (const lang of LANGUAGES) {
+    for (const [key, text] of Object.entries(MESSAGES[lang])) {
+      if (key.startsWith('confirm.') || key === 'action.confirmFor') assert.match(text, /\{reference\}/, `${lang} ${key}`);
+    }
+  }
+});
+
 test('placeholders are filled and an unknown key shows itself', () => {
   assert.equal(t('tr', 'app.signedInAs', { user: 'ayse.analyst' }), 'ayse.analyst olarak girildi');
   assert.equal(t('en', 'detail.heading', { task: 'Screening review', key: 7 }), 'Screening review · 7');
@@ -51,7 +64,9 @@ test('every label the screens build from server values exists in both languages'
     // Every refusal code bpo-process-api returns (TaskRefusal.Reason), plus the client's own.
     'error.NOT_YOUR_ACTOR', 'error.TASK_NOT_FOUND', 'error.TASK_CLAIMED_BY_OTHER', 'error.TASK_NOT_ASSIGNED_TO_YOU',
     'error.DECISION_NOT_ALLOWED', 'error.BODY_NOT_ALLOWED', 'error.FOUR_EYES_REQUIRED', 'error.ENGINE_UNAVAILABLE',
+    'error.OUTCOME_UNKNOWN',
     'error.SESSION', 'error.UNKNOWN',
+    'outcome.closed', 'outcome.notRecorded', 'outcome.stillOpen', 'outcome.unreachable',
   ];
   for (const lang of LANGUAGES) for (const key of dynamic) assert.ok(key in MESSAGES[lang], `${lang} ${key}`);
 });

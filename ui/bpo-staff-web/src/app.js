@@ -5,12 +5,13 @@ import { createApi, ApiError } from './api.js';
 import { authorizeUrl, createPkce, exchangeCode, jwkThumbprint } from './auth.js';
 import { createDpopKey } from './dpop.js';
 import { LANGUAGES, t } from './i18n.js';
-import { errorMessage } from './view-model.js';
+import { errorMessage, newTaskCount, unknownOutcomeMessage } from './view-model.js';
 import { renderActorNav, renderDetail, renderList } from './views.js';
 import { el, clear } from './dom.js';
 import { forgetKey, loadOrCreateKey } from './key-store.js';
 
-const state = { lang: 'tr', actors: [], actor: null, filter: 'mine', tasks: [] };
+const state = { lang: 'tr', actors: [], actor: null, filter: 'mine', tasks: [], poll: null };
+const POLL_MS = 60 * 1000;
 const $ = (id) => document.getElementById(id);
 
 function announce(message, kind = 'status') {
@@ -28,47 +29,99 @@ function applyLanguage() {
   $('language-label').textContent = t(state.lang, 'app.language');
 }
 
+const codeOf = (e) => (e instanceof ApiError ? e.code : 'UNKNOWN');
+
+async function failed(e) {
+  const code = codeOf(e);
+  announce(errorMessage(state.lang, code), 'error');
+  if (code === 'SESSION') {
+    sessionStorage.clear();
+    await forgetKey().catch(() => {});
+  }
+}
+
 async function guarded(action, success) {
   try {
     const result = await action();
     if (success) announce(t(state.lang, success));
     return result;
   } catch (e) {
-    const code = e instanceof ApiError ? e.code : 'UNKNOWN';
-    announce(errorMessage(state.lang, code), 'error');
-    if (code === 'SESSION') {
-      sessionStorage.clear();
-      await forgetKey().catch(() => {});
-    }
+    await failed(e);
     return undefined;
   }
 }
 
-async function showList(api, config) {
+function stopPolling() {
+  clearInterval(state.poll);
+  state.poll = null;
+}
+
+// Every minute, while the tab is visible, look for new tasks and say how many; the table is redrawn only when
+// the user asks, so a row never moves under the pointer. A failed poll stays silent; the next one tries again.
+function startPolling(api, showNewTasks) {
+  stopPolling();
+  const actor = state.actor;
+  state.poll = setInterval(async () => {
+    if (document.visibilityState !== 'visible' || state.actor !== actor) return;
+    try {
+      const fresh = await api.list(actor);
+      if (state.actor === actor && state.poll) showNewTasks(newTaskCount(state.tasks, fresh));
+    } catch { /* shown on the next user action */ }
+  }, POLL_MS);
+}
+
+// {@code done} is the status of the action that led here; it is announced once the list is in, so the
+// loading message does not replace it.
+async function showList(api, config, done) {
+  stopPolling();
   announce(t(state.lang, 'status.loading'));
-  const tasks = await guarded(() => api.list(state.actor));
+  const tasks = await guarded(() => api.list(state.actor), done);
   if (tasks === undefined) return;
   state.tasks = tasks;
-  renderList($('main'), {
+  const showNewTasks = renderList($('main'), {
     lang: state.lang, actor: state.actor, tasks, filter: state.filter,
     onFilter: (f) => { state.filter = f; showList(api, config); },
     onRefresh: () => showList(api, config),
     onOpen: (key) => showDetail(api, config, key),
     onClaim: async (key) => { if (await guarded(() => api.claim(state.actor, key), 'status.claimed')) showDetail(api, config, key); },
   });
+  startPolling(api, showNewTasks);
+}
+
+// A decision whose answer was lost may or may not be recorded. Read the task once to tell which, show what
+// that means, and never send the decision again on the user's behalf.
+async function afterUnknownOutcome(api, config, key) {
+  let result;
+  try {
+    result = { task: await api.read(state.actor, key) };
+  } catch (e) {
+    result = { code: codeOf(e) };
+  }
+  announce(t(state.lang, unknownOutcomeMessage(result)), 'error');
+  if (result.task?.assignment === 'MINE') return showDetail(api, config, key);
+  return showList(api, config);
 }
 
 async function showDetail(api, config, key) {
+  stopPolling();
   const task = await guarded(() => api.read(state.actor, key));
   if (!task) return showList(api, config);
   renderDetail($('main'), {
     lang: state.lang, actor: state.actor, task, referenceViews: config.referenceViews,
     onBack: () => showList(api, config),
     onClaim: async () => { if (await guarded(() => api.claim(state.actor, key), 'status.claimed')) showDetail(api, config, key); },
-    onRelease: async () => { await guarded(() => api.release(state.actor, key), 'status.released'); showList(api, config); },
+    onRelease: async () => {
+      const released = await guarded(() => api.release(state.actor, key).then(() => true));
+      showList(api, config, released ? 'status.released' : undefined);
+    },
     onDecide: async (decision) => {
-      const done = await guarded(() => api.decide(state.actor, key, decision).then(() => true), 'status.saved');
-      if (done) showList(api, config);
+      try {
+        await api.decide(state.actor, key, decision);
+      } catch (e) {
+        if (codeOf(e) === 'OUTCOME_UNKNOWN') return afterUnknownOutcome(api, config, key);
+        return failed(e);
+      }
+      return showList(api, config, 'status.saved');
     },
   });
 }

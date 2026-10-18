@@ -130,13 +130,14 @@ class CamundaUserTaskAdapterTest {
     }
 
     @Test
-    void findsWhoCompletedTheMakerTaskOfTheSameInstance() {
+    void findsEveryoneWhoHeldTheMakerTaskOfTheSameInstanceInAnyState() {
         body = "{\"items\":[{\"userTaskKey\":\"1\",\"processDefinitionId\":\"lib-screening-review\",\"elementId\":\"Task_AnalystReview\","
             + "\"state\":\"COMPLETED\",\"assignee\":\"deniz.both\",\"candidateGroups\":[],\"processInstanceKey\":\"9\"}]}";
 
-        assertThat(adapter.completedBy(9, "Task_AnalystReview")).containsExactly("deniz.both");
+        assertThat(adapter.assigneesOf(9, "Task_AnalystReview")).containsExactly("deniz.both");
         assertThat(requests).singleElement().asString()
-            .contains("\"processInstanceKey\":\"9\"", "\"elementId\":\"Task_AnalystReview\"", "\"state\":\"COMPLETED\"");
+            .contains("\"processInstanceKey\":\"9\"", "\"elementId\":\"Task_AnalystReview\"")
+            .doesNotContain("\"state\"");
     }
 
     @Test
@@ -158,6 +159,49 @@ class CamundaUserTaskAdapterTest {
         org.assertj.core.api.Assertions.assertThatCode(() -> adapter.complete(7, Map.of())).doesNotThrowAnyException();
         status = 200;
         assertThatThrownBy(() -> adapter.complete(7, Map.of())).isInstanceOf(TaskRefusal.class);
+    }
+
+    @Test
+    void aWriteWhoseAnswerIsLostOrIsAServerErrorHasAnUnknownOutcome() {
+        for (int s : new int[] {500, 502, 503}) {
+            status = s;
+            body = "{}";
+            assertThatThrownBy(() -> adapter.complete(7, Map.of("reviewDecision", "CLEAR"))).isInstanceOf(TaskRefusal.class)
+                .satisfies(e -> assertThat(((TaskRefusal) e).reason()).isEqualTo(TaskRefusal.Reason.OUTCOME_UNKNOWN));
+        }
+        status = 400;
+        assertThatThrownBy(() -> adapter.complete(7, Map.of())).isInstanceOf(TaskRefusal.class)
+            .satisfies(e -> assertThat(((TaskRefusal) e).reason()).isEqualTo(TaskRefusal.Reason.ENGINE_UNAVAILABLE));
+    }
+
+    @Test
+    void aWriteThatTimesOutAfterSendingHasAnUnknownOutcome() throws IOException {
+        HttpServer slow = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        slow.createContext("/", exchange -> {
+            try {
+                Thread.sleep(7_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            exchange.close();
+        });
+        slow.start();
+        try {
+            CamundaUserTaskAdapter slowAdapter = new CamundaUserTaskAdapter(
+                URI.create("http://127.0.0.1:" + slow.getAddress().getPort()), () -> "svc-token");
+            assertThatThrownBy(() -> slowAdapter.complete(7, Map.of("reviewDecision", "CLEAR"))).isInstanceOf(TaskRefusal.class)
+                .satisfies(e -> assertThat(((TaskRefusal) e).reason()).isEqualTo(TaskRefusal.Reason.OUTCOME_UNKNOWN));
+        } finally {
+            slow.stop(0);
+        }
+    }
+
+    @Test
+    void aWriteToAnEngineThatRefusesTheConnectionSentNothing() {
+        server.stop(0);
+
+        assertThatThrownBy(() -> adapter.complete(7, Map.of())).isInstanceOf(TaskRefusal.class)
+            .satisfies(e -> assertThat(((TaskRefusal) e).reason()).isEqualTo(TaskRefusal.Reason.ENGINE_UNAVAILABLE));
     }
 
     @Test

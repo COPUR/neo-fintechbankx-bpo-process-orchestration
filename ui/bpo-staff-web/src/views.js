@@ -4,7 +4,7 @@
 
 import { el, clear } from './dom.js';
 import { t, formatDateTime } from './i18n.js';
-import { FILTERS, decisionOptions, detailState, filterTasks, referenceLink, taskRows } from './view-model.js';
+import { FILTERS, decisionOptions, detailState, filterCounts, filterTasks, referenceLink, taskRows } from './view-model.js';
 
 function heading(text) {
   const h = el('h2', { tabindex: '-1', id: 'screen-heading' }, text);
@@ -24,25 +24,41 @@ export function renderActorNav(nav, { lang, actors, current, onSelect }) {
   nav.append(list);
 }
 
+/**
+ * The task list. Returns a function that shows how many new tasks a background poll found: it fills a polite
+ * status line with an update button and leaves the table alone, so nothing moves under the user's pointer.
+ */
 export function renderList(main, { lang, actor, tasks, filter, onFilter, onOpen, onClaim, onRefresh }) {
   clear(main);
   main.append(heading(t(lang, `actor.${actor}`)), el('p', { class: 'hint' }, t(lang, `actor.${actor}.hint`)));
 
+  const counts = filterCounts(tasks);
   const filterGroup = el('fieldset', { class: 'filters' }, el('legend', {}, t(lang, 'list.filter')));
   for (const f of FILTERS) {
     const id = `filter-${f}`;
     const input = el('input', { type: 'radio', name: 'filter', id, value: f, checked: f === filter });
     input.addEventListener('change', () => onFilter(f));
-    filterGroup.append(el('span', { class: 'choice' }, input, el('label', { for: id }, t(lang, `list.filter.${f}`))));
+    const text = t(lang, 'list.filter.count', { label: t(lang, `list.filter.${f}`), count: counts[f] });
+    filterGroup.append(el('span', { class: 'choice' }, input, el('label', { for: id }, text)));
   }
   const refresh = el('button', { type: 'button', class: 'secondary' }, t(lang, 'list.refresh'));
   refresh.addEventListener('click', onRefresh);
   main.append(el('div', { class: 'toolbar' }, filterGroup, refresh));
 
+  const banner = el('div', { class: 'new-tasks', role: 'status', 'aria-live': 'polite' });
+  main.append(banner);
+  const showNewTasks = (count) => {
+    clear(banner);
+    if (count <= 0) return;
+    const update = el('button', { type: 'button', class: 'secondary' }, t(lang, 'list.showNew'));
+    update.addEventListener('click', onRefresh);
+    banner.append(el('span', {}, t(lang, 'list.newTasks', { count })), ' ', update);
+  };
+
   const rows = taskRows(filterTasks(tasks, filter), lang);
   if (rows.length === 0) {
     main.append(el('p', { class: 'empty' }, t(lang, 'list.empty')));
-    return;
+    return showNewTasks;
   }
   const table = el('table', { class: 'tasks' },
     el('caption', {}, t(lang, 'list.caption', { actor: t(lang, `actor.${actor}`) })),
@@ -67,6 +83,7 @@ export function renderList(main, { lang, actor, tasks, filter, onFilter, onOpen,
   }
   table.append(body);
   main.append(table);
+  return showNewTasks;
 }
 
 export function renderDetail(main, { lang, actor, task, referenceViews, onBack, onClaim, onRelease, onDecide }) {
@@ -85,7 +102,8 @@ export function renderDetail(main, { lang, actor, task, referenceViews, onBack, 
   const link = referenceLink(referenceViews, task.referenceName, task.reference);
   if (link) main.append(el('p', {}, el('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, t(lang, `detail.open.${task.referenceName}`))));
   if (state.referenceMissing) main.append(el('p', { class: 'warning', role: 'note' }, t(lang, 'detail.referenceMissing')));
-  if (task.fourEyes) main.append(el('p', { class: 'note' }, t(lang, 'detail.fourEyes')));
+  if (state.fourEyesBlocked) main.append(el('p', { class: 'warning', role: 'note' }, t(lang, 'detail.fourEyesBlocked')));
+  else if (task.fourEyes) main.append(el('p', { class: 'note' }, t(lang, 'detail.fourEyes')));
 
   if (state.heldByOther) {
     main.append(el('p', { class: 'note' }, t(lang, 'detail.otherHolds')));
@@ -95,6 +113,14 @@ export function renderDetail(main, { lang, actor, task, referenceViews, onBack, 
     const claim = el('button', { type: 'button' }, t(lang, 'action.claim'));
     claim.addEventListener('click', onClaim);
     main.append(el('p', {}, t(lang, 'detail.claimFirst')), claim);
+    return;
+  }
+
+  const release = el('button', { type: 'button', class: 'secondary' }, t(lang, 'action.release'));
+  release.addEventListener('click', onRelease);
+  if (!state.canDecide) {
+    // Four eyes or a missing reference: no decision form, only the way out.
+    main.append(el('div', { class: 'buttons' }, release));
     return;
   }
 
@@ -108,8 +134,6 @@ export function renderDetail(main, { lang, actor, task, referenceViews, onBack, 
   }
   const confirmBox = el('div', { class: 'confirm', hidden: true, role: 'alertdialog', 'aria-labelledby': 'confirm-text' });
   const submit = el('button', { type: 'submit' }, t(lang, 'action.submit'));
-  const release = el('button', { type: 'button', class: 'secondary' }, t(lang, 'action.release'));
-  release.addEventListener('click', onRelease);
   form.append(group, el('div', { class: 'buttons' }, submit, release), confirmBox);
 
   form.addEventListener('submit', (event) => {
@@ -125,7 +149,7 @@ export function renderDetail(main, { lang, actor, task, referenceViews, onBack, 
       return;
     }
     clear(confirmBox);
-    const yes = el('button', { type: 'button' }, t(lang, 'action.confirm'));
+    const yes = el('button', { type: 'button' }, option.confirmLabel);
     const no = el('button', { type: 'button', class: 'secondary' }, t(lang, 'action.cancel'));
     yes.addEventListener('click', () => onDecide(chosen.value));
     no.addEventListener('click', () => { confirmBox.hidden = true; submit.focus(); });

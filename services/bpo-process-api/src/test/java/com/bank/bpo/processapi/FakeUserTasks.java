@@ -73,14 +73,18 @@ public final class FakeUserTasks implements UserTaskPort {
     }
 
     @Override
-    public Set<String> completedBy(long processInstanceKey, String elementId) {
+    public Set<String> assigneesOf(long processInstanceKey, String elementId) {
         check();
         Set<String> who = new LinkedHashSet<>();
         tasks.values().stream()
-            .filter(t -> t.processInstanceKey() == processInstanceKey && t.elementId().equals(elementId)
-                && "COMPLETED".equals(t.state()) && t.assignee() != null)
+            .filter(t -> t.processInstanceKey() == processInstanceKey && t.elementId().equals(elementId) && t.assignee() != null)
             .forEach(t -> who.add(t.assignee()));
         return who;
+    }
+
+    /** The task's SLA timer fired: the engine cancels it and keeps its assignee. */
+    public void expire(long key) {
+        replace(key, tasks.get(key).assignee(), "CANCELED");
     }
 
     private void replace(long key, String assignee, String state) {

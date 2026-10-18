@@ -8,8 +8,9 @@ import java.util.Set;
 
 /**
  * The engine's user-task operations the API needs. Implementations throw
- * {@link com.bank.bpo.processapi.domain.TaskRefusal} with ENGINE_UNAVAILABLE when the engine cannot be read
- * or written, and TASK_CLAIMED_BY_OTHER when an assignment conflicts.
+ * {@link com.bank.bpo.processapi.domain.TaskRefusal} with ENGINE_UNAVAILABLE when the engine cannot be reached
+ * (nothing was sent), OUTCOME_UNKNOWN when a write was sent but its answer was lost, and TASK_CLAIMED_BY_OTHER
+ * when an assignment conflicts.
  */
 public interface UserTaskPort {
 
@@ -28,6 +29,9 @@ public interface UserTaskPort {
     /** Completes the task with exactly these variables. */
     void complete(long taskKey, Map<String, String> variables);
 
-    /** Who completed the given element in this process instance (empty when nobody did, for example on SLA expiry). */
-    Set<String> completedBy(long processInstanceKey, String elementId);
+    /**
+     * Everyone the engine records as assignee of the given element in this process instance, in any state:
+     * completed, and also cancelled when its SLA timer expired while someone held it. Four eyes excludes them all.
+     */
+    Set<String> assigneesOf(long processInstanceKey, String elementId);
 }
