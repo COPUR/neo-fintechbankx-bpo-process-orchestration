@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="Definitions_CmpReviewRouting" name="cmp review routing"
+             namespace="https://fintechbankx.example/bpo"
+             modeler:executionPlatform="Camunda Cloud"
+             modeler:executionPlatformVersion="8.10.0">
+  <!-- Routing only (05 §6.3, 07 O12): which queue reviews a REVIEW screening and how long it may wait.
+       No amount, rate or eligibility threshold; the screening decision itself is cmp's. -->
+  <decision id="cmp-review-routing" name="Screening review routing">
+    <extensionElements>
+      <zeebe:versionTag value="0.1.0" />
+    </extensionElements>
+    <decisionTable id="DecisionTable_ReviewRouting" hitPolicy="FIRST">
+      <input id="Input_Jurisdiction" label="Jurisdiction">
+        <inputExpression id="InputExpression_Jurisdiction" typeRef="string">
+          <text>jurisdiction</text>
+        </inputExpression>
+      </input>
+      <input id="Input_SourceProcess" label="Source process">
+        <inputExpression id="InputExpression_SourceProcess" typeRef="string">
+          <text>sourceProcess</text>
+        </inputExpression>
+      </input>
+      <output id="Output_ReviewQueue" label="Review queue" name="reviewQueue" typeRef="string" />
+      <output id="Output_ReviewSla" label="Review SLA" name="reviewSla" typeRef="string" />
+      <output id="Output_EscalationQueue" label="Escalation queue" name="escalationQueue" typeRef="string" />
+      <output id="Output_EscalationSla" label="Escalation SLA" name="escalationSla" typeRef="string" />
+      <rule id="Rule_AeOnboarding">
+        <inputEntry id="InputEntry_AeOnboarding_J"><text>"AE"</text></inputEntry>
+        <inputEntry id="InputEntry_AeOnboarding_P"><text>"acc-tpp-account-opening"</text></inputEntry>
+        <outputEntry id="OutputEntry_AeOnboarding_Q"><text>"cmp-ae-onboarding-l1"</text></outputEntry>
+        <outputEntry id="OutputEntry_AeOnboarding_S"><text>"PT4H"</text></outputEntry>
+        <outputEntry id="OutputEntry_AeOnboarding_EQ"><text>"cmp-ae-mlro"</text></outputEntry>
+        <outputEntry id="OutputEntry_AeOnboarding_ES"><text>"PT8H"</text></outputEntry>
+      </rule>
+      <rule id="Rule_TrOnboarding">
+        <inputEntry id="InputEntry_TrOnboarding_J"><text>"TR"</text></inputEntry>
+        <inputEntry id="InputEntry_TrOnboarding_P"><text>"acc-tpp-account-opening"</text></inputEntry>
+        <outputEntry id="OutputEntry_TrOnboarding_Q"><text>"cmp-tr-onboarding-l1"</text></outputEntry>
+        <outputEntry id="OutputEntry_TrOnboarding_S"><text>"PT4H"</text></outputEntry>
+        <outputEntry id="OutputEntry_TrOnboarding_EQ"><text>"cmp-tr-compliance-officer"</text></outputEntry>
+        <outputEntry id="OutputEntry_TrOnboarding_ES"><text>"PT8H"</text></outputEntry>
+      </rule>
+      <rule id="Rule_Default">
+        <inputEntry id="InputEntry_Default_J"><text>-</text></inputEntry>
+        <inputEntry id="InputEntry_Default_P"><text>-</text></inputEntry>
+        <outputEntry id="OutputEntry_Default_Q"><text>"cmp-review-l1"</text></outputEntry>
+        <outputEntry id="OutputEntry_Default_S"><text>"PT8H"</text></outputEntry>
+        <outputEntry id="OutputEntry_Default_EQ"><text>"cmp-review-l2"</text></outputEntry>
+        <outputEntry id="OutputEntry_Default_ES"><text>"PT24H"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

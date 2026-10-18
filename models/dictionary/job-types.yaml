@@ -1,0 +1,13 @@
+# Job types (07 O7): <context>.<command>; a breaking change adds .v2 and old instances finish on the old type.
+# Each entry names the worker family that serves it and the provider operation it calls. The expectation
+# files under contracts/expectations/ hold the fields; "requested" means the operation is not in the
+# catalog yet and the simulator stands in for it.
+job-types:
+  cus.verify-kyc: {family: onboarding, provider: cus, operation: getKycStatus, contract: requested, outputs: [kycStatus]}
+  cmp.screen: {family: onboarding, provider: cmp, operation: screenOnboardingApplicant, contract: requested, outputs: [screeningId, screeningDecision]}
+  cmp.open-review-case: {family: onboarding, provider: cmp, operation: openReviewCase, contract: requested, outputs: [caseId]}
+  cmp.record-review-decision: {family: onboarding, provider: cmp, operation: recordReviewDecision, contract: requested, outputs: [reviewOutcome]}
+  acc.open-account: {family: onboarding, provider: acc, operation: openApplicationAccount, contract: requested, outputs: [accountId], pivot: true}
+  acc.reject-application: {family: onboarding, provider: acc, operation: rejectAccountApplication, contract: requested, outputs: []}
+  psg-tr.alias-offer: {family: onboarding, provider: psg-tr, operation: offerKolayAdresAlias, contract: requested, outputs: [aliasOfferStatus]}
+  ntf.notify: {family: onboarding, provider: ntf, operation: sendNotification, contract: requested, outputs: [notificationRef]}

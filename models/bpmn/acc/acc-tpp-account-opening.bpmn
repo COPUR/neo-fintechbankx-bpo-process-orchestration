@@ -1,0 +1,479 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  id="Definitions_AccTppAccountOpening"
+                  targetNamespace="https://fintechbankx.example/bpo"
+                  exporter="fbx-bpo" exporterVersion="0.1.0"
+                  modeler:executionPlatform="Camunda Cloud"
+                  modeler:executionPlatformVersion="8.10.0">
+  <bpmn:error id="Error_ScreeningRejected" name="Err_ScreeningRejected" errorCode="Err_ScreeningRejected" />
+  <bpmn:message id="Message_KycCompleted" name="Msg_KycCompleted">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=applicationId" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <!-- P1 (05 §6.1, 07 §3.5a): a TPP-submitted account application. Camunda holds ids and enums only:
+       the application, KYC result, screening decision and account live in cus, cmp and acc. -->
+  <bpmn:process id="acc-tpp-account-opening" name="TPP account opening" isExecutable="true">
+    <bpmn:extensionElements>
+      <zeebe:versionTag value="0.1.0" />
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="StartEvent_ApplicationSubmitted" name="Application submitted">
+      <bpmn:outgoing>Flow_ToVerifyKyc</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_VerifyKyc" name="Verify KYC">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cus.verify-kyc" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToVerifyKyc</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToKycStatus</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_KycStatus" name="KYC status?" default="Flow_KycRejected">
+      <bpmn:incoming>Flow_ToKycStatus</bpmn:incoming>
+      <bpmn:outgoing>Flow_KycVerified</bpmn:outgoing>
+      <bpmn:outgoing>Flow_KycPending</bpmn:outgoing>
+      <bpmn:outgoing>Flow_KycRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:eventBasedGateway id="Gateway_AwaitKyc" name="Await KYC">
+      <bpmn:incoming>Flow_KycPending</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToKycCompleted</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToKycDocsTimeout</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="Msg_KycCompleted" name="KYC completed">
+      <bpmn:incoming>Flow_ToKycCompleted</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToKycOutcome</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_KycCompleted" messageRef="Message_KycCompleted" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Timer_KycDocsTimeout" name="Documents not received in 7 days">
+      <bpmn:incoming>Flow_ToKycDocsTimeout</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToKycTimedOut</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_KycDocsTimeout">
+        <bpmn:timeDuration>P7D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="Gateway_KycOutcome" name="KYC outcome?" default="Flow_KycOutcomeRejected">
+      <bpmn:incoming>Flow_ToKycOutcome</bpmn:incoming>
+      <bpmn:outgoing>Flow_KycOutcomeVerified</bpmn:outgoing>
+      <bpmn:outgoing>Flow_KycOutcomeRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="Gateway_JoinScreen">
+      <bpmn:incoming>Flow_KycVerified</bpmn:incoming>
+      <bpmn:incoming>Flow_KycOutcomeVerified</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToScreen</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_Screen" name="Screen applicant">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="cmp.screen" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToScreen</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToScreeningDecision</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_ScreeningDecision" name="Screening decision?" default="Flow_ScreeningRejected">
+      <bpmn:incoming>Flow_ToScreeningDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_ScreeningClear</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ScreeningReview</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ScreeningRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:callActivity id="Task_ScreeningReview" name="Screening review">
+      <bpmn:extensionElements>
+        <zeebe:calledElement processId="lib-screening-review" propagateAllChildVariables="false" propagateAllParentVariables="false" bindingType="versionTag" versionTag="0.1.0" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=screeningId" target="screeningId" />
+          <zeebe:input source="=applicationId" target="sourceRef" />
+          <zeebe:input source="=&#34;acc-tpp-account-opening&#34;" target="sourceProcess" />
+          <zeebe:input source="=jurisdiction" target="jurisdiction" />
+          <zeebe:output source="=reviewOutcome" target="reviewOutcome" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ScreeningReview</bpmn:incoming>
+      <bpmn:outgoing>Flow_ReviewCleared</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:boundaryEvent id="BoundaryEvent_ScreeningRejected" name="Review rejected" attachedToRef="Task_ScreeningReview">
+      <bpmn:outgoing>Flow_ReviewRejected</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrorEventDefinition_ScreeningRejected" errorRef="Error_ScreeningRejected" />
+    </bpmn:boundaryEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinOpen">
+      <bpmn:incoming>Flow_ScreeningClear</bpmn:incoming>
+      <bpmn:incoming>Flow_ReviewCleared</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToOpenAccount</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_OpenAccount" name="Open account">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="acc.open-account" retries="5" />
+        <zeebe:properties>
+          <!-- Pivot (05 §7): the account exists after this step; only retryable steps follow. -->
+          <zeebe:property name="bpo:pivot" value="true" />
+        </zeebe:properties>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToOpenAccount</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToJurisdiction</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_Jurisdiction" name="Jurisdiction?" default="Flow_JurisdictionAe">
+      <bpmn:incoming>Flow_ToJurisdiction</bpmn:incoming>
+      <bpmn:outgoing>Flow_JurisdictionTr</bpmn:outgoing>
+      <bpmn:outgoing>Flow_JurisdictionAe</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_OfferKolayAdres" name="Offer Kolay Adres alias">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="psg-tr.alias-offer" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_JurisdictionTr</bpmn:incoming>
+      <bpmn:outgoing>Flow_AliasOffered</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_JoinNotifyOpened">
+      <bpmn:incoming>Flow_JurisdictionAe</bpmn:incoming>
+      <bpmn:incoming>Flow_AliasOffered</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToNotifyOpened</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_NotifyOpened" name="Notify customer: account opened">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="ntf.notify" retries="5" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;ACCOUNT_OPENED&#34;" target="purpose" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToNotifyOpened</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToAccountOpened</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndEvent_AccountOpened" name="Account opened">
+      <bpmn:incoming>Flow_ToAccountOpened</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinKycRejected">
+      <bpmn:incoming>Flow_KycRejected</bpmn:incoming>
+      <bpmn:incoming>Flow_KycOutcomeRejected</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToKycRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateThrowEvent id="Event_KycRejected" name="KYC rejected">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=&#34;KYC_REJECTED&#34;" target="rejectionReason" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToKycRejected</bpmn:incoming>
+      <bpmn:outgoing>Flow_KycRejectedToJoin</bpmn:outgoing>
+    </bpmn:intermediateThrowEvent>
+    <bpmn:intermediateThrowEvent id="Event_KycTimedOut" name="KYC timed out">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=&#34;KYC_TIMEOUT&#34;" target="rejectionReason" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToKycTimedOut</bpmn:incoming>
+      <bpmn:outgoing>Flow_KycTimedOutToJoin</bpmn:outgoing>
+    </bpmn:intermediateThrowEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinScreeningRejected">
+      <bpmn:incoming>Flow_ScreeningRejected</bpmn:incoming>
+      <bpmn:incoming>Flow_ReviewRejected</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToScreeningRejected</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateThrowEvent id="Event_ScreeningRejected" name="Screening rejected">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=&#34;SCREENING_REJECTED&#34;" target="rejectionReason" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToScreeningRejected</bpmn:incoming>
+      <bpmn:outgoing>Flow_ScreeningRejectedToJoin</bpmn:outgoing>
+    </bpmn:intermediateThrowEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinReject">
+      <bpmn:incoming>Flow_KycRejectedToJoin</bpmn:incoming>
+      <bpmn:incoming>Flow_KycTimedOutToJoin</bpmn:incoming>
+      <bpmn:incoming>Flow_ScreeningRejectedToJoin</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToRejectApplication</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_RejectApplication" name="Reject application">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="acc.reject-application" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToRejectApplication</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToNotifyRejected</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_NotifyRejected" name="Notify customer: application rejected">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="ntf.notify" retries="5" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;ACCOUNT_APPLICATION_REJECTED&#34;" target="purpose" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToNotifyRejected</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToRejected</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndEvent_Rejected" name="Application rejected">
+      <bpmn:incoming>Flow_ToRejected</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_ToVerifyKyc" sourceRef="StartEvent_ApplicationSubmitted" targetRef="Task_VerifyKyc" />
+    <bpmn:sequenceFlow id="Flow_ToKycStatus" sourceRef="Task_VerifyKyc" targetRef="Gateway_KycStatus" />
+    <bpmn:sequenceFlow id="Flow_KycVerified" name="VERIFIED" sourceRef="Gateway_KycStatus" targetRef="Gateway_JoinScreen">
+      <bpmn:conditionExpression>=kycStatus = "VERIFIED"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_KycPending" name="PENDING" sourceRef="Gateway_KycStatus" targetRef="Gateway_AwaitKyc">
+      <bpmn:conditionExpression>=kycStatus = "PENDING"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_KycRejected" name="REJECTED" sourceRef="Gateway_KycStatus" targetRef="Gateway_JoinKycRejected" />
+    <bpmn:sequenceFlow id="Flow_ToKycCompleted" sourceRef="Gateway_AwaitKyc" targetRef="Msg_KycCompleted" />
+    <bpmn:sequenceFlow id="Flow_ToKycDocsTimeout" sourceRef="Gateway_AwaitKyc" targetRef="Timer_KycDocsTimeout" />
+    <bpmn:sequenceFlow id="Flow_ToKycOutcome" sourceRef="Msg_KycCompleted" targetRef="Gateway_KycOutcome" />
+    <bpmn:sequenceFlow id="Flow_ToKycTimedOut" sourceRef="Timer_KycDocsTimeout" targetRef="Event_KycTimedOut" />
+    <bpmn:sequenceFlow id="Flow_KycOutcomeVerified" name="VERIFIED" sourceRef="Gateway_KycOutcome" targetRef="Gateway_JoinScreen">
+      <bpmn:conditionExpression>=kycStatus = "VERIFIED"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_KycOutcomeRejected" name="otherwise" sourceRef="Gateway_KycOutcome" targetRef="Gateway_JoinKycRejected" />
+    <bpmn:sequenceFlow id="Flow_ToScreen" sourceRef="Gateway_JoinScreen" targetRef="Task_Screen" />
+    <bpmn:sequenceFlow id="Flow_ToScreeningDecision" sourceRef="Task_Screen" targetRef="Gateway_ScreeningDecision" />
+    <bpmn:sequenceFlow id="Flow_ScreeningClear" name="CLEAR" sourceRef="Gateway_ScreeningDecision" targetRef="Gateway_JoinOpen">
+      <bpmn:conditionExpression>=screeningDecision = "CLEAR"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ScreeningReview" name="REVIEW" sourceRef="Gateway_ScreeningDecision" targetRef="Task_ScreeningReview">
+      <bpmn:conditionExpression>=screeningDecision = "REVIEW"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ScreeningRejected" name="REJECT" sourceRef="Gateway_ScreeningDecision" targetRef="Gateway_JoinScreeningRejected" />
+    <bpmn:sequenceFlow id="Flow_ReviewCleared" sourceRef="Task_ScreeningReview" targetRef="Gateway_JoinOpen" />
+    <bpmn:sequenceFlow id="Flow_ReviewRejected" sourceRef="BoundaryEvent_ScreeningRejected" targetRef="Gateway_JoinScreeningRejected" />
+    <bpmn:sequenceFlow id="Flow_ToOpenAccount" sourceRef="Gateway_JoinOpen" targetRef="Task_OpenAccount" />
+    <bpmn:sequenceFlow id="Flow_ToJurisdiction" sourceRef="Task_OpenAccount" targetRef="Gateway_Jurisdiction" />
+    <bpmn:sequenceFlow id="Flow_JurisdictionTr" name="TR" sourceRef="Gateway_Jurisdiction" targetRef="Task_OfferKolayAdres">
+      <bpmn:conditionExpression>=jurisdiction = "TR"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_JurisdictionAe" name="AE" sourceRef="Gateway_Jurisdiction" targetRef="Gateway_JoinNotifyOpened" />
+    <bpmn:sequenceFlow id="Flow_AliasOffered" sourceRef="Task_OfferKolayAdres" targetRef="Gateway_JoinNotifyOpened" />
+    <bpmn:sequenceFlow id="Flow_ToNotifyOpened" sourceRef="Gateway_JoinNotifyOpened" targetRef="Task_NotifyOpened" />
+    <bpmn:sequenceFlow id="Flow_ToAccountOpened" sourceRef="Task_NotifyOpened" targetRef="EndEvent_AccountOpened" />
+    <bpmn:sequenceFlow id="Flow_ToKycRejected" sourceRef="Gateway_JoinKycRejected" targetRef="Event_KycRejected" />
+    <bpmn:sequenceFlow id="Flow_ToScreeningRejected" sourceRef="Gateway_JoinScreeningRejected" targetRef="Event_ScreeningRejected" />
+    <bpmn:sequenceFlow id="Flow_KycRejectedToJoin" sourceRef="Event_KycRejected" targetRef="Gateway_JoinReject" />
+    <bpmn:sequenceFlow id="Flow_KycTimedOutToJoin" sourceRef="Event_KycTimedOut" targetRef="Gateway_JoinReject" />
+    <bpmn:sequenceFlow id="Flow_ScreeningRejectedToJoin" sourceRef="Event_ScreeningRejected" targetRef="Gateway_JoinReject" />
+    <bpmn:sequenceFlow id="Flow_ToRejectApplication" sourceRef="Gateway_JoinReject" targetRef="Task_RejectApplication" />
+    <bpmn:sequenceFlow id="Flow_ToNotifyRejected" sourceRef="Task_RejectApplication" targetRef="Task_NotifyRejected" />
+    <bpmn:sequenceFlow id="Flow_ToRejected" sourceRef="Task_NotifyRejected" targetRef="EndEvent_Rejected" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="acc-tpp-account-opening">
+      <bpmndi:BPMNShape id="StartEvent_ApplicationSubmitted_di" bpmnElement="StartEvent_ApplicationSubmitted">
+        <dc:Bounds x="102" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_VerifyKyc_di" bpmnElement="Task_VerifyKyc">
+        <dc:Bounds x="240" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_KycStatus_di" bpmnElement="Gateway_KycStatus">
+        <dc:Bounds x="435" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_AwaitKyc_di" bpmnElement="Gateway_AwaitKyc">
+        <dc:Bounds x="605" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Msg_KycCompleted_di" bpmnElement="Msg_KycCompleted">
+        <dc:Bounds x="782" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timer_KycDocsTimeout_di" bpmnElement="Timer_KycDocsTimeout">
+        <dc:Bounds x="782" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_KycOutcome_di" bpmnElement="Gateway_KycOutcome">
+        <dc:Bounds x="945" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_KycTimedOut_di" bpmnElement="Event_KycTimedOut">
+        <dc:Bounds x="952" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinScreen_di" bpmnElement="Gateway_JoinScreen">
+        <dc:Bounds x="1115" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinKycRejected_di" bpmnElement="Gateway_JoinKycRejected">
+        <dc:Bounds x="1115" y="245" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Screen_di" bpmnElement="Task_Screen">
+        <dc:Bounds x="1260" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_KycRejected_di" bpmnElement="Event_KycRejected">
+        <dc:Bounds x="1292" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ScreeningDecision_di" bpmnElement="Gateway_ScreeningDecision">
+        <dc:Bounds x="1455" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ScreeningReview_di" bpmnElement="Task_ScreeningReview">
+        <dc:Bounds x="1600" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinOpen_di" bpmnElement="Gateway_JoinOpen">
+        <dc:Bounds x="1795" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinScreeningRejected_di" bpmnElement="Gateway_JoinScreeningRejected">
+        <dc:Bounds x="1795" y="245" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_OpenAccount_di" bpmnElement="Task_OpenAccount">
+        <dc:Bounds x="1940" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_ScreeningRejected_di" bpmnElement="Event_ScreeningRejected">
+        <dc:Bounds x="1972" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Jurisdiction_di" bpmnElement="Gateway_Jurisdiction">
+        <dc:Bounds x="2135" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinReject_di" bpmnElement="Gateway_JoinReject">
+        <dc:Bounds x="2135" y="245" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_OfferKolayAdres_di" bpmnElement="Task_OfferKolayAdres">
+        <dc:Bounds x="2280" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RejectApplication_di" bpmnElement="Task_RejectApplication">
+        <dc:Bounds x="2280" y="230" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinNotifyOpened_di" bpmnElement="Gateway_JoinNotifyOpened">
+        <dc:Bounds x="2475" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyRejected_di" bpmnElement="Task_NotifyRejected">
+        <dc:Bounds x="2450" y="230" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyOpened_di" bpmnElement="Task_NotifyOpened">
+        <dc:Bounds x="2620" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Rejected_di" bpmnElement="EndEvent_Rejected">
+        <dc:Bounds x="2652" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_AccountOpened_di" bpmnElement="EndEvent_AccountOpened">
+        <dc:Bounds x="2822" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BoundaryEvent_ScreeningRejected_di" bpmnElement="BoundaryEvent_ScreeningRejected">
+        <dc:Bounds x="1650" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToVerifyKyc_di" bpmnElement="Flow_ToVerifyKyc">
+        <di:waypoint x="120" y="120" />
+        <di:waypoint x="290" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToKycStatus_di" bpmnElement="Flow_ToKycStatus">
+        <di:waypoint x="290" y="120" />
+        <di:waypoint x="460" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KycVerified_di" bpmnElement="Flow_KycVerified">
+        <di:waypoint x="460" y="120" />
+        <di:waypoint x="1140" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KycPending_di" bpmnElement="Flow_KycPending">
+        <di:waypoint x="460" y="120" />
+        <di:waypoint x="630" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KycRejected_di" bpmnElement="Flow_KycRejected">
+        <di:waypoint x="460" y="120" />
+        <di:waypoint x="460" y="270" />
+        <di:waypoint x="1140" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToKycCompleted_di" bpmnElement="Flow_ToKycCompleted">
+        <di:waypoint x="630" y="120" />
+        <di:waypoint x="800" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToKycDocsTimeout_di" bpmnElement="Flow_ToKycDocsTimeout">
+        <di:waypoint x="630" y="120" />
+        <di:waypoint x="630" y="270" />
+        <di:waypoint x="800" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToKycOutcome_di" bpmnElement="Flow_ToKycOutcome">
+        <di:waypoint x="800" y="120" />
+        <di:waypoint x="970" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToKycTimedOut_di" bpmnElement="Flow_ToKycTimedOut">
+        <di:waypoint x="800" y="270" />
+        <di:waypoint x="970" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KycOutcomeVerified_di" bpmnElement="Flow_KycOutcomeVerified">
+        <di:waypoint x="970" y="120" />
+        <di:waypoint x="1140" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KycOutcomeRejected_di" bpmnElement="Flow_KycOutcomeRejected">
+        <di:waypoint x="970" y="120" />
+        <di:waypoint x="970" y="270" />
+        <di:waypoint x="1140" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToScreen_di" bpmnElement="Flow_ToScreen">
+        <di:waypoint x="1140" y="120" />
+        <di:waypoint x="1310" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToScreeningDecision_di" bpmnElement="Flow_ToScreeningDecision">
+        <di:waypoint x="1310" y="120" />
+        <di:waypoint x="1480" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ScreeningClear_di" bpmnElement="Flow_ScreeningClear">
+        <di:waypoint x="1480" y="120" />
+        <di:waypoint x="1820" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ScreeningReview_di" bpmnElement="Flow_ScreeningReview">
+        <di:waypoint x="1480" y="120" />
+        <di:waypoint x="1650" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ScreeningRejected_di" bpmnElement="Flow_ScreeningRejected">
+        <di:waypoint x="1480" y="120" />
+        <di:waypoint x="1480" y="270" />
+        <di:waypoint x="1820" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReviewCleared_di" bpmnElement="Flow_ReviewCleared">
+        <di:waypoint x="1650" y="120" />
+        <di:waypoint x="1820" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReviewRejected_di" bpmnElement="Flow_ReviewRejected">
+        <di:waypoint x="1668" y="160" />
+        <di:waypoint x="1668" y="270" />
+        <di:waypoint x="1820" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToOpenAccount_di" bpmnElement="Flow_ToOpenAccount">
+        <di:waypoint x="1820" y="120" />
+        <di:waypoint x="1990" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToJurisdiction_di" bpmnElement="Flow_ToJurisdiction">
+        <di:waypoint x="1990" y="120" />
+        <di:waypoint x="2160" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JurisdictionTr_di" bpmnElement="Flow_JurisdictionTr">
+        <di:waypoint x="2160" y="120" />
+        <di:waypoint x="2330" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_JurisdictionAe_di" bpmnElement="Flow_JurisdictionAe">
+        <di:waypoint x="2160" y="120" />
+        <di:waypoint x="2500" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AliasOffered_di" bpmnElement="Flow_AliasOffered">
+        <di:waypoint x="2330" y="120" />
+        <di:waypoint x="2500" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToNotifyOpened_di" bpmnElement="Flow_ToNotifyOpened">
+        <di:waypoint x="2500" y="120" />
+        <di:waypoint x="2670" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToAccountOpened_di" bpmnElement="Flow_ToAccountOpened">
+        <di:waypoint x="2670" y="120" />
+        <di:waypoint x="2840" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToKycRejected_di" bpmnElement="Flow_ToKycRejected">
+        <di:waypoint x="1140" y="270" />
+        <di:waypoint x="1310" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToScreeningRejected_di" bpmnElement="Flow_ToScreeningRejected">
+        <di:waypoint x="1820" y="270" />
+        <di:waypoint x="1990" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KycRejectedToJoin_di" bpmnElement="Flow_KycRejectedToJoin">
+        <di:waypoint x="1310" y="270" />
+        <di:waypoint x="2160" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_KycTimedOutToJoin_di" bpmnElement="Flow_KycTimedOutToJoin">
+        <di:waypoint x="970" y="270" />
+        <di:waypoint x="2160" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ScreeningRejectedToJoin_di" bpmnElement="Flow_ScreeningRejectedToJoin">
+        <di:waypoint x="1990" y="270" />
+        <di:waypoint x="2160" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToRejectApplication_di" bpmnElement="Flow_ToRejectApplication">
+        <di:waypoint x="2160" y="270" />
+        <di:waypoint x="2330" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToNotifyRejected_di" bpmnElement="Flow_ToNotifyRejected">
+        <di:waypoint x="2330" y="270" />
+        <di:waypoint x="2500" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToRejected_di" bpmnElement="Flow_ToRejected">
+        <di:waypoint x="2500" y="270" />
+        <di:waypoint x="2670" y="270" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,16 @@
+# Shared dev cluster: one broker, enough for model and worker work.
+orchestration:
+  clusterSize: "1"
+  partitionCount: "1"
+  replicationFactor: "1"
+  security:
+    authentication:
+      oidc:
+        issuer: https://keycloak.dev.fintechbankx.example/realms/fintechbankx
+        redirectUrl: https://camunda.dev.fintechbankx.example
+  data:
+    secondaryStorage:
+      opensearch:
+        url: https://opensearch.dev.fintechbankx.example:9200
+        auth:
+          username: camunda

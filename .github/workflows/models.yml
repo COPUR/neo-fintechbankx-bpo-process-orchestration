@@ -1,0 +1,54 @@
+name: Models
+# BPMN/DMN lint (bpmnlint with the camunda-cloud-8-10 profile plus the repo's own fbx rules), the lint
+# rules' own tests, the catalog pin check, and a render of the Camunda 8.10 chart for every environment.
+# Runner: see required-gates.yml.
+
+on:
+  pull_request:
+    branches: [main, dev, staging]
+  push:
+    branches: [main, dev, staging]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: models/lint
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install lint dependencies
+        env:
+          NPM_CONFIG_CACHE: /tmp/.npm
+        run: npm ci --prefix lint
+
+      - name: Lint rule tests
+        run: npm test --prefix lint
+
+      - name: Lint every model
+        run: npm run lint --prefix lint
+
+      - name: Catalog pins
+        run: bash scripts/ci/check-catalog-pins.sh
+
+  chart:
+    name: deploy/camunda-chart
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+
+      - name: Render the locked chart for every environment
+        run: bash scripts/ci/camunda-chart-render.sh

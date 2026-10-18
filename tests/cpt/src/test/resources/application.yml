@@ -1,0 +1,4 @@
+camunda:
+  process-test:
+    camunda-docker-image-name: camunda/camunda
+    camunda-docker-image-version: 8.10.4

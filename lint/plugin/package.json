@@ -1,0 +1,7 @@
+{
+  "name": "bpmnlint-plugin-fbx",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FinTechBankX bpo modelling rules: Camunda holds no money, no business rules and no personal data",
+  "main": "index.js"
+}

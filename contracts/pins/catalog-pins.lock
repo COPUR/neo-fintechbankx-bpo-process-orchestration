@@ -1,0 +1,2 @@
+# <provider> <operationId> <catalog repo> <commit>
+# Empty: no operation used by the workers is published yet (all expectations are "requested").

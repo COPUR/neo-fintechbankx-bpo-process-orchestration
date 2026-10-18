@@ -1,0 +1,18 @@
+provider: cus
+service: fintechbankx-customer-profile-kyc-core
+operations:
+  getKycStatus:
+    status: requested
+    method: GET
+    path: /api/v1/applications/{applicationId}/kyc
+    audience: svc-cus-customer-profile
+    caller: svc-bpo-worker-onboarding
+    response: {kycStatus: [VERIFIED, PENDING, REJECTED], customerId: id}
+    personalData: none   # status and ids only; the profile itself stays in cus
+events:
+  KycCompleted:
+    status: requested
+    topic: evt.cus.customer.v1
+    eventType: Customer.Kyc.Completed.v1
+    key: customerId
+    fields: {applicationId: id, kycStatus: [VERIFIED, REJECTED]}

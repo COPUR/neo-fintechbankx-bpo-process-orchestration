@@ -1,0 +1,9 @@
+description = 'ArchUnit rule proposal - no io.camunda in the domain repositories - with its own red and green test'
+
+dependencies {
+    api 'com.tngtech.archunit:archunit-junit5:' + archunitVersion
+    // Only the test fixtures use the engine client, to have something for the rule to refuse.
+    testImplementation 'io.camunda:camunda-spring-boot-starter'
+    // The last test runs the rule over the real workers, which is the case it exists to refuse.
+    testImplementation project(':bpo-worker-onboarding')
+}

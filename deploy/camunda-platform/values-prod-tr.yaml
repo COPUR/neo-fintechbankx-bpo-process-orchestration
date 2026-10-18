@@ -1,0 +1,24 @@
+# Production, one cluster per jurisdiction (C8-K2): data and process state for
+# TR never leave the TR cluster. Three brokers, six partitions, three replicas.
+global:
+  license:
+    secret:
+      existingSecret: camunda-license-tr
+orchestration:
+  clusterSize: "3"
+  partitionCount: "6"
+  replicationFactor: "3"
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  security:
+    authentication:
+      oidc:
+        issuer: https://keycloak.tr.fintechbankx.example/realms/fintechbankx
+        redirectUrl: https://camunda.tr.fintechbankx.example
+  data:
+    secondaryStorage:
+      opensearch:
+        url: https://opensearch.tr.fintechbankx.example:9200
+        auth:
+          username: camunda

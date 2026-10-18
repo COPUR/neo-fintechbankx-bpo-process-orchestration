@@ -1,0 +1,3 @@
+# Messages (07 O4/O5): the correlation key is always the business key; the event bridge sets messageId = eventId.
+messages:
+  Msg_KycCompleted: {correlationKey: applicationId, source: evt.cus.customer.v1 (requested event), ttl: PT10M, variables: [kycStatus]}

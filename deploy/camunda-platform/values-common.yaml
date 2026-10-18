@@ -1,0 +1,72 @@
+# Shared by every environment and both jurisdictions. Environment files add
+# sizing, hosts and secret names only. Images are pinned by digest (Platform
+# rule: charts by image digest); the tag stays for readability.
+#
+# What Camunda is allowed to hold (07 §2): process state, ids and enums only.
+# No money, no business rules, no personal data, so no component here needs a
+# store for them.
+global:
+  strictValues: true
+  security:
+    authentication:
+      method: oidc
+  identity:
+    auth:
+      enabled: true
+  license:
+    secret:
+      existingSecret: camunda-license
+      existingSecretKey: license-key
+
+orchestration:
+  enabled: true
+  image:
+    repository: camunda/camunda
+    tag: 8.10.4
+    digest: sha256:e71bed9297381fe3449ebe2c022264ca62f5a87e95fe3aece42c6f4e1069d139
+  security:
+    authentication:
+      method: oidc
+      unprotectedApi: false
+      oidc:
+        clientId: camunda-orchestration
+        audience: camunda-orchestration-api
+        usernameClaim: preferred_username
+        clientIdClaim: azp
+        secret:
+          existingSecret: camunda-orchestration-oidc
+          existingSecretKey: client-secret
+    authorizations:
+      enabled: true
+    # The chart ships demo/connectors users with known passwords and grants the
+    # admin role to a user named "demo" even under OIDC. None of that here:
+    # people sign in through Keycloak, workers through their own clients.
+    initialization:
+      users: []
+      defaultRoles:
+        admin:
+          users: []
+        connectors:
+          users: []
+          clients: []
+  data:
+    secondaryStorage:
+      type: opensearch
+      opensearch:
+        auth:
+          secret:
+            existingSecret: camunda-opensearch
+            existingSecretKey: password
+
+# Connectors would let a model call out on its own; every outbound call goes
+# through a worker that owns its contract (07 §2), so they stay off.
+connectors:
+  enabled: false
+webModeler:
+  enabled: false
+camundaHub:
+  enabled: false
+identity:
+  enabled: false
+optimize:
+  enabled: false

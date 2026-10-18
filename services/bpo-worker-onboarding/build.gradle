@@ -1,0 +1,15 @@
+apply plugin: 'org.springframework.boot'
+
+description = 'bpo-worker-onboarding - job workers for the onboarding family (P1 TPP account opening, screening review)'
+
+dependencies {
+    implementation project(':bpo-worker-kit')
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'tools.jackson.core:jackson-databind'
+
+    testImplementation project(':domain-simulator')
+    testImplementation 'com.tngtech.archunit:archunit-junit5:' + archunitVersion
+}
+
+tasks.named('bootJar') { enabled = false }
+tasks.named('jar') { enabled = true }
