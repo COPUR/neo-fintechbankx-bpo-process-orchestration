@@ -26,7 +26,7 @@ Measures (Micrometer, through the `TaskEvents` port; no user id, task key or ref
 
 | Meter | Tags | Answers |
 |---|---|---|
-| `bpo.staff.task.decisions` | actor, taskType, decision, sla (`within` / `after`) | hypothesis 1 |
+| `bpo.staff.task.decisions` | actor, taskType, decision, sla (`on-time` / `late`) | hypothesis 1 |
 | `bpo.staff.task.age` | actor, taskType | time from task creation to decision |
 | `bpo.staff.task.refusals` | actor, reason | hypothesis 2 |
 | `bpo.staff.task.claims`, `.releases` | actor, taskType | claim churn |
@@ -67,14 +67,13 @@ Confirmation that names the record (built).
 | +-------------------------------------------------------------------------+ |
 ```
 
-Four eyes shown on opening (built). No decision form; Release is the only action.
+Four eyes shown on opening (built). No claim and no decision form; Release appears only if the task was
+already assigned to the user outside the API.
 
 ```
 | Senior review · 2251799813685410                                             |
 | [!] You held the earlier step of this record, so four eyes keeps you from    |
-|     this decision. Release the task so another authorised colleague can      |
-|     claim it.                                                                |
-| [Release]                                                                    |
+|     claiming or deciding this task. Another authorised colleague decides it. |
 ```
 
 Unknown outcome (built). The screen reads the task once and shows one of three answers; it never resends.
@@ -83,7 +82,8 @@ Unknown outcome (built). The screen reads the task once and shows one of three a
 | [!] decision sent, answer lost
 |       task closed (404)        -> "The task is closed: your decision was most likely recorded.
 |                                    Do not send it again; check the result on the record's own screen."
-|       still open, still mine   -> "The decision was not recorded. You can choose and record it again."
+|       still open, still mine   -> "Your decision may still be in progress. Wait a minute and open the
+|                                    task again; if it is still open, record the decision again."
 |       engine still unreachable -> "The outcome is still unknown. Do not send the decision again."
 ```
 

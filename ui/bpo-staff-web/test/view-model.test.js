@@ -65,6 +65,9 @@ test('no decision without a reference or against four eyes; the holder can still
   assert.deepEqual([noReference.canDecide, noReference.canRelease, noReference.referenceMissing], [false, true, true]);
   const blocked = detailState({ assignment: 'MINE', reference: 'C-1', fourEyesBlocked: true });
   assert.deepEqual([blocked.canDecide, blocked.canRelease, blocked.fourEyesBlocked], [false, true, true]);
+  // Four eyes also keeps the user from claiming: an unassigned task offers no claim.
+  const unclaimable = detailState({ assignment: 'UNASSIGNED', reference: 'C-1', fourEyesBlocked: true });
+  assert.deepEqual([unclaimable.canClaim, unclaimable.canDecide, unclaimable.canRelease], [false, false, false]);
   // Only a literal true blocks; the server sends a boolean.
   assert.equal(detailState({ assignment: 'MINE', reference: 'C-1', fourEyesBlocked: 'false' }).canDecide, true);
 });

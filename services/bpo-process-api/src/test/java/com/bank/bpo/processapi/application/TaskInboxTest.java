@@ -155,12 +155,11 @@ class TaskInboxTest {
         inbox.claim(Actor.COMPLIANCE_ANALYST, BOTH, 10);
         inbox.decide(Actor.COMPLIANCE_ANALYST, BOTH, 10, Map.of("decision", "ESCALATE"));
         engine.add(11, LIB, "Task_SeniorReview", null, 900, "cmp-tr-compliance-officer");
-        inbox.claim(Actor.COMPLIANCE_SENIOR, BOTH, 11);
 
-        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_SENIOR, BOTH, 11, Map.of("decision", "CLEAR")), Reason.FOUR_EYES_REQUIRED);
-        assertThat(engine.completions).doesNotContainKey(11L);
+        assertThat(inbox.read(Actor.COMPLIANCE_SENIOR, BOTH, 11).fourEyesBlocked()).isTrue();
+        assertRefused(() -> inbox.claim(Actor.COMPLIANCE_SENIOR, BOTH, 11), Reason.FOUR_EYES_REQUIRED);
+        assertThat(engine.find(11).orElseThrow().assignee()).isNull();
 
-        inbox.release(Actor.COMPLIANCE_SENIOR, BOTH, 11);
         assertThat(inbox.claim(Actor.COMPLIANCE_SENIOR, OFFICER, 11).fourEyesBlocked()).isFalse();
         inbox.decide(Actor.COMPLIANCE_SENIOR, OFFICER, 11, Map.of("decision", "CLEAR"));
         assertThat(engine.completions.get(11L)).containsExactly(Map.entry("reviewDecision", "CLEAR"));
@@ -172,8 +171,9 @@ class TaskInboxTest {
         engine.add(30, LIB, "Task_AnalystReview", null, 3000, "cmp-tr-onboarding-l1");
         inbox.claim(Actor.COMPLIANCE_ANALYST, BOTH, 30);
         engine.expire(30);
-        engine.add(31, LIB, "Task_SeniorReview", null, 3000, "cmp-tr-compliance-officer");
-        assertThat(inbox.claim(Actor.COMPLIANCE_SENIOR, BOTH, 31).fourEyesBlocked()).isTrue();
+        // Assigned outside the API (for example in Tasklist): the decision is still refused.
+        engine.add(31, LIB, "Task_SeniorReview", BOTH.id(), 3000, "cmp-tr-compliance-officer");
+        assertThat(inbox.read(Actor.COMPLIANCE_SENIOR, BOTH, 31).fourEyesBlocked()).isTrue();
         assertThat(inbox.list(Actor.COMPLIANCE_SENIOR, BOTH)).allMatch(v -> !v.fourEyesBlocked());
 
         assertRefused(() -> inbox.decide(Actor.COMPLIANCE_SENIOR, BOTH, 31, Map.of("decision", "CLEAR")), Reason.FOUR_EYES_REQUIRED);
@@ -231,9 +231,7 @@ class TaskInboxTest {
         assertThat(engine.completions.get(20L)).containsExactly(Map.entry("exceptionDecision", "ESCALATE"));
 
         engine.add(21, "pay-instant-exception", "Task_SupervisorReview", null, 2000, "pay-tr-fast-supervisor");
-        inbox.claim(Actor.PAYMENTS_SUPERVISOR, ops, 21);
-        assertRefused(() -> inbox.decide(Actor.PAYMENTS_SUPERVISOR, ops, 21, Map.of("decision", "SETTLED")), Reason.FOUR_EYES_REQUIRED);
-        inbox.release(Actor.PAYMENTS_SUPERVISOR, ops, 21);
+        assertRefused(() -> inbox.claim(Actor.PAYMENTS_SUPERVISOR, ops, 21), Reason.FOUR_EYES_REQUIRED);
         inbox.claim(Actor.PAYMENTS_SUPERVISOR, supervisor, 21);
         assertRefused(() -> inbox.decide(Actor.PAYMENTS_SUPERVISOR, supervisor, 21, Map.of("decision", "ESCALATE")), Reason.DECISION_NOT_ALLOWED);
         inbox.decide(Actor.PAYMENTS_SUPERVISOR, supervisor, 21, Map.of("decision", "SETTLED"));

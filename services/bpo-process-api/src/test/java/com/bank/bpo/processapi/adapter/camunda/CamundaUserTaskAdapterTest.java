@@ -158,7 +158,18 @@ class CamundaUserTaskAdapterTest {
         body = "";
         org.assertj.core.api.Assertions.assertThatCode(() -> adapter.complete(7, Map.of())).doesNotThrowAnyException();
         status = 200;
-        assertThatThrownBy(() -> adapter.complete(7, Map.of())).isInstanceOf(TaskRefusal.class);
+        body = "{}";
+        org.assertj.core.api.Assertions.assertThatCode(() -> adapter.complete(7, Map.of())).doesNotThrowAnyException();
+    }
+
+    @Test
+    void aWriteToATaskThatIsGoneIsNotFoundNotAnEngineFault() {
+        // A retry after a lost answer meets a task the first write already closed; the user must not hear
+        // "nothing was recorded".
+        status = 404;
+        body = "{\"title\":\"NOT_FOUND\"}";
+        assertThatThrownBy(() -> adapter.complete(7, Map.of("reviewDecision", "CLEAR"))).isInstanceOf(TaskRefusal.class)
+            .satisfies(e -> assertThat(((TaskRefusal) e).reason()).isEqualTo(TaskRefusal.Reason.TASK_NOT_FOUND));
     }
 
     @Test

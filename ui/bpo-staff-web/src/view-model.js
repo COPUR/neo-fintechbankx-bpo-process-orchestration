@@ -77,14 +77,15 @@ export function decisionOptions(task, lang) {
 
 /**
  * What the detail screen lets the user do now. A decision is offered only on a task the user holds, with a
- * readable reference, and that four eyes does not keep from the user; otherwise the user can only release it.
+ * readable reference, and that four eyes does not keep from the user. A task four eyes keeps from the user
+ * cannot be claimed either; one the user already holds can only be released.
  */
 export function detailState(task) {
   const mine = task.assignment === 'MINE';
   const fourEyesBlocked = task.fourEyesBlocked === true;
   const referenceMissing = !task.reference;
   return {
-    canClaim: task.assignment === 'UNASSIGNED',
+    canClaim: task.assignment === 'UNASSIGNED' && !fourEyesBlocked,
     canRelease: mine,
     canDecide: mine && !fourEyesBlocked && !referenceMissing,
     heldByOther: task.assignment === 'OTHER',

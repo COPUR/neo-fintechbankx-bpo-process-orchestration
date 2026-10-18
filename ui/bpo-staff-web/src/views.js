@@ -102,8 +102,16 @@ export function renderDetail(main, { lang, actor, task, referenceViews, onBack, 
   const link = referenceLink(referenceViews, task.referenceName, task.reference);
   if (link) main.append(el('p', {}, el('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, t(lang, `detail.open.${task.referenceName}`))));
   if (state.referenceMissing) main.append(el('p', { class: 'warning', role: 'note' }, t(lang, 'detail.referenceMissing')));
-  if (state.fourEyesBlocked) main.append(el('p', { class: 'warning', role: 'note' }, t(lang, 'detail.fourEyesBlocked')));
-  else if (task.fourEyes) main.append(el('p', { class: 'note' }, t(lang, 'detail.fourEyes')));
+  if (task.fourEyes && !state.fourEyesBlocked) main.append(el('p', { class: 'note' }, t(lang, 'detail.fourEyes')));
+
+  const release = el('button', { type: 'button', class: 'secondary' }, t(lang, 'action.release'));
+  release.addEventListener('click', onRelease);
+  if (state.fourEyesBlocked) {
+    // No claim and no decision form; a task already held (for example claimed in Tasklist) can be released.
+    main.append(el('p', { class: 'warning', role: 'note' }, t(lang, 'detail.fourEyesBlocked')));
+    if (state.canRelease) main.append(el('div', { class: 'buttons' }, release));
+    return;
+  }
 
   if (state.heldByOther) {
     main.append(el('p', { class: 'note' }, t(lang, 'detail.otherHolds')));
@@ -116,10 +124,8 @@ export function renderDetail(main, { lang, actor, task, referenceViews, onBack, 
     return;
   }
 
-  const release = el('button', { type: 'button', class: 'secondary' }, t(lang, 'action.release'));
-  release.addEventListener('click', onRelease);
   if (!state.canDecide) {
-    // Four eyes or a missing reference: no decision form, only the way out.
+    // A missing reference: no decision form, only the way out.
     main.append(el('div', { class: 'buttons' }, release));
     return;
   }

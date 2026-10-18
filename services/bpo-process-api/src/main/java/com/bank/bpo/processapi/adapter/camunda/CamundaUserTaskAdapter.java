@@ -3,6 +3,7 @@ package com.bank.bpo.processapi.adapter.camunda;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.ENGINE_UNAVAILABLE;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.OUTCOME_UNKNOWN;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_CLAIMED_BY_OTHER;
+import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_NOT_FOUND;
 
 import com.bank.bpo.processapi.application.port.UserTaskPort;
 import com.bank.bpo.processapi.domain.EngineTask;
@@ -154,10 +155,14 @@ public final class CamundaUserTaskAdapter implements UserTaskPort {
 
     private static void expectWritten(HttpResponse<String> response) {
         int status = response.statusCode();
-        if (status == 204) {
+        if (status >= 200 && status < 300) {
             return;
         }
-        // 5xx and 429 come from a server that may have applied the write; 4xx refused it before applying.
+        // 404: the task is gone, typically because an earlier write whose answer was lost closed it.
+        if (status == 404) {
+            throw new TaskRefusal(TASK_NOT_FOUND);
+        }
+        // 5xx and 429 come from a server that may have applied the write; other 4xx refused it before applying.
         throw new TaskRefusal(status >= 500 || status == 429 ? OUTCOME_UNKNOWN : ENGINE_UNAVAILABLE);
     }
 

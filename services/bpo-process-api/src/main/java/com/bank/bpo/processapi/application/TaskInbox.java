@@ -98,6 +98,10 @@ public final class TaskInbox {
         return reported(actor, () -> {
             Visible v = visibleOrRefuse(actor, user, taskKey);
             if (v.task.assignee() == null) {
+                // A user four eyes keeps from deciding cannot hold the task either, or it would sit until expiry.
+                if (heldMaker(v, user)) {
+                    throw new TaskRefusal(FOUR_EYES_REQUIRED);
+                }
                 tasks.assign(taskKey, user.id());
                 events.claimed(actor, v.type.elementId());
             } else if (!user.id().equals(v.task.assignee())) {

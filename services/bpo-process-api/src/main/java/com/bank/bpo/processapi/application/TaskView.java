@@ -8,7 +8,7 @@ import java.util.List;
  * What a staff user may see of a task. {@code reference} is the owning service's record id (for a review, the
  * cmp case); it is read-only and only filled on a single-task read. {@code fourEyesBlocked} is also only worked
  * out on a single-task read: it is true when the user held the maker task of this checker task, in any state, so
- * the screen shows the block before the user decides; the decision is refused either way.
+ * the screen shows the block before the user claims or decides; claim and decision are refused either way.
  */
 public record TaskView(
     long taskKey,

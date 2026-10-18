@@ -27,8 +27,9 @@ Provider audiences for `svc-bpo-worker-onboarding` (the existing client ids, so 
 Separation of duties for staff (requested): no account holds a maker queue group and its checker queue group
 of the same process at once (`cmp-*-onboarding-l1` or `cmp-review-l1` with `cmp-*-mlro`,
 `cmp-tr-compliance-officer` or `cmp-review-l2`; `pay-tr-fast-ops` or `pay-ops-l1` with `pay-tr-fast-supervisor`
-or `pay-ops-l2`), and `preferred_username` cannot be changed by the user. `bpo-process-api` already refuses a
-checker decision by anyone who held the maker task; this rule stops the same person reaching both queues.
+or `pay-ops-l2`), and `preferred_username` cannot be changed by the user. `bpo-process-api` refuses the checker
+task to whoever is the maker task's last recorded assignee, but the engine keeps no earlier assignees, so someone
+who released the maker task before it ended is only stopped by this rule.
 
 Groups for user tasks, from `cmp-review-routing`: `cmp-ae-onboarding-l1`, `cmp-ae-mlro`,
 `cmp-tr-onboarding-l1`, `cmp-tr-compliance-officer`, `cmp-review-l1`, `cmp-review-l2`.

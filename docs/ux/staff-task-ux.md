@@ -14,7 +14,7 @@ pattern when their models arrive.
 | A user writes the decision and nothing else | The decision form has one radio group. Ids are shown as text, never as inputs. The API accepts `{"decision": "..."}` only and refuses any other field (`BODY_NOT_ALLOWED`); it writes only the task type's decision variable. |
 | Staff calls are DPoP (ADR 0002, user calls through a UI) | Sign-in is OIDC with PKCE; the browser holds a non-extractable key; every call carries a fresh proof. A token copied out of the browser is refused without the key. |
 | Say what is known | When the engine refuses or cannot be reached before the write, the user is told nothing was recorded. When the write went out and the answer was lost (`OUTCOME_UNKNOWN`), the user is told the outcome is unknown; the screen reads the task once to find out and never resends on its own. |
-| Four eyes in the API | Whoever held the maker task of a case, whether they completed it or let its deadline pass, cannot complete its checker task. The detail screen shows the block before the user decides. A person holding both queues is still a separation-of-duties gap that identity should close (`docs/identity-requests.md`). |
+| Four eyes in the API | Whoever is the recorded assignee of the maker task of a case when it ends, whether they completed it or let its deadline pass, cannot claim or complete its checker task; the detail screen shows the block first. The engine keeps only a task's last assignee, so someone who released the maker task before it ended is not caught: only the separation-of-duties rule requested from identity (`docs/identity-requests.md`) closes that gap. |
 | One actor, one set of routes | `/api/v1/actors/<actor>/tasks...` per actor, each with its own controller; a user sees an actor's screens only when the token carries one of its queue groups. |
 
 ## 2. Human actors and their tasks
@@ -78,7 +78,8 @@ that the task holds no detail, and the link to the owning screen ("Open the case
 "Open the payment in the payments operations view") built from a configured https template per reference kind
 and the reference id (a non-plain id gets no link). The user claims, then decides; release puts
 the task back in the queue. When the reference cannot be read, or four eyes keeps the user from this task, the
-decision form is not shown at all; the only action is Release.
+decision form is not shown at all: with a missing reference the only action is Release; under four eyes the task
+cannot be claimed either.
 
 **Decision.** One fieldset with a legend and one radio per decision the server allows, labelled per task type.
 Every decision except a plain CLEAR asks for confirmation in place. The text names the record ("Payment
@@ -96,10 +97,10 @@ the two languages use different placeholders.
 | Empty view | no task in the filter | "Bu görünümde görev yok" / "No tasks in this view" | change filter, refresh |
 | Claimed by other | someone claimed first (`TASK_CLAIMED_BY_OTHER`, 409) | "Görevi az önce başka biri üstlendi" | back to list |
 | Not yours | decide or release without the claim (`TASK_NOT_ASSIGNED_TO_YOU`, 409) | "Önce üstlenin" | claim |
-| Four eyes | user held the maker task, in any state (shown on the detail as `fourEyesBlocked`; `FOUR_EYES_REQUIRED`, 409, if sent anyway) | "Dört göz kuralı gereği bu kararı veremezsiniz" | release (the only button) |
+| Four eyes | user is the maker task's recorded assignee, in any state (shown on the detail as `fourEyesBlocked`; claim and decision answer `FOUR_EYES_REQUIRED`, 409) | "Dört göz kuralı gereği bu görevi üstlenemez ve karar veremezsiniz" | none; release if the task was assigned outside the API |
 | Closed or not visible | SLA timer closed the task, another decision landed, or the key is outside the user's queues (`TASK_NOT_FOUND`, 404, one answer for all) | "Görev bulunamadı ya da kapandı" | refresh |
 | Engine down | no connection, a refused or unreadable answer, a read that timed out (`ENGINE_UNAVAILABLE`, 503) | "Hiçbir şey kaydedilmedi" | retry later |
-| Outcome unknown | a claim, release or decision was sent and its answer was lost: timeout, 5xx or 429 after sending (`OUTCOME_UNKNOWN`, 504) | after one re-read: "Görev kapanmış: kararınız büyük olasılıkla kaydedildi" / "Kaydedilmedi, yeniden kaydedebilirsiniz" / "Sonuç hâlâ bilinmiyor, tekrar göndermeyin" | follows the re-read; never an automatic resend |
+| Outcome unknown | a claim, release or decision was sent and its answer was lost: timeout, 5xx or 429 after sending (`OUTCOME_UNKNOWN`, 504) | after one re-read: "Görev kapanmış: kararınız büyük olasılıkla kaydedildi" / "Görev hâlâ sizde, kararınız işleniyor olabilir; bir dakika sonra yeniden açın" / "Sonuç hâlâ bilinmiyor, tekrar göndermeyin" | follows the re-read; never an automatic resend. A second decision on a task the first one closed answers `TASK_NOT_FOUND`, never "nothing recorded" |
 | Session ended | 401 | "Oturumunuz sona erdi" | sign in; the DPoP key is forgotten |
 | Reference unreadable | the reference variable is missing or not a plain id | "Kayıt numarası okunamadı, karar formu gösterilmiyor" | tell operations and release |
 
@@ -113,8 +114,9 @@ case in the compliance case view; returns and records CLEAR, REJECT (confirm) or
 case leaves their hands).
 
 **Senior compliance.** Same list, escalated cases only. The detail shows the four-eyes note. Decisions are
-CLEAR or REJECT. On a case whose analyst task the user held, the detail shows the four-eyes block and only
-Release, so a person who holds both queues still needs a colleague.
+CLEAR or REJECT. On a case whose analyst task ended with the user as its assignee, the detail shows the four-eyes
+block and neither claim nor decision is offered. A person who holds both queues and released the analyst task
+before it ended is not caught by the API; the identity separation-of-duties rule is what stops that.
 
 **Payments operations.** The list shows instant payment exceptions with their 30-minute (TR FAST) or one-hour
 SLA. The user claims one, opens the payment in the payments operations view, reads the scheme record and records
@@ -125,8 +127,8 @@ it is, the confirmation asks the user to confirm only what the scheme record say
 check.
 
 **Payments supervisor.** Escalated payments and those whose operations SLA expired. SETTLED or REJECTED only,
-both confirmed. On a payment whose operations task the user held, the detail shows the four-eyes block and only
-Release. A third outcome for a scheme record that stays unclear is being added to the model by the TR FAST
+both confirmed. On a payment whose operations task ended with the user as its assignee, the detail shows the
+four-eyes block and neither claim nor decision is offered. A third outcome for a scheme record that stays unclear is being added to the model by the TR FAST
 package; the screen gains its label when the model carries it.
 
 ## 6. Accessibility (WCAG 2.2 AA)
@@ -191,7 +193,7 @@ sequenceDiagram
   their URL templates are configuration (`referenceViews` in `config.json`).
 - Four eyes reads who held the maker task, in any state, from the engine's task history; history retention must
   outlast the checker SLA.
-- Measures: `bpo.staff.task.claims`, `.releases`, `.decisions` (actor, task type, decision, within or after
-  SLA), `.age` (creation to decision) and `.refusals` (actor, reason) go to Micrometer through the
+- Measures: `bpo.staff.task.claims`, `.releases`, `.decisions` (actor, task type, decision, sla `on-time` or
+  `late`), `.age` (creation to decision) and `.refusals` (actor, reason) go to Micrometer through the
   `TaskEvents` port; no user id, task key or reference is a tag. Dashboards belong to the observability repo.
 - Paging of long queues and coded decision reasons come in the next round (`docs/ux/staff-task-research.md`).
