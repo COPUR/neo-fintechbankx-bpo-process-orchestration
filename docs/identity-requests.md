@@ -2,7 +2,7 @@
 
 The realm is defined in the identity repository (realm as code). This file lists what this repo needs from
 it; the identity owner adds the clients there. Authentication of worker calls is decided in
-`docs/adr/0002-worker-to-provider-authentication.md`.
+`docs/adr/0002-service-authentication-mtls-and-dpop.md`.
 
 | Client | Type | Used by | Needs |
 |---|---|---|---|

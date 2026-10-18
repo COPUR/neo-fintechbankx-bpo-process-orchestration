@@ -7,4 +7,4 @@ repo, numbered `NNNN-title.md`. A local ADR that turns out to bind other repos m
 | ADR | Status | Title |
 |---|---|---|
 | 0001 | Proposed | Camunda holds process state only |
-| 0002 | Proposed | Worker-to-provider authentication: mesh mTLS plus audience and caller checks |
+| 0002 | Proposed | Service authentication: mesh mTLS for internal calls, DPoP for user calls |

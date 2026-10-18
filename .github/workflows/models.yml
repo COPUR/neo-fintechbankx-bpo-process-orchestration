@@ -1,7 +1,7 @@
 name: Models
 # BPMN/DMN lint (bpmnlint with the camunda-cloud-8-10 profile plus the repo's own fbx rules), the lint
 # rules' own tests, the catalog pin check, and a render of the Camunda 8.10 chart for every environment.
-# Runner: see required-gates.yml.
+# GitHub-hosted runners only (public repository): see required-gates.yml.
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ permissions:
 jobs:
   lint:
     name: models/lint
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -41,7 +41,7 @@ jobs:
 
   chart:
     name: deploy/camunda-chart
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

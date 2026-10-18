@@ -61,12 +61,14 @@ bash scripts/ci/camunda-chart-render.sh   # needs helm 3.19+
 |---|---|---|
 | `ci/build` | required-gates | A module that does not compile. |
 | `ci/test` | required-gates | A failing unit, contract, ArchUnit or process test; a model or `src/main` change without a test change. |
+| `ci/test-arm64` | required-gates | The same tests failing on arm64. |
 | `ci/security` | required-gates | A secret in the workspace (gitleaks). |
 | `models/lint` | models | A model or decision the lint rules refuse; a job type without a contract expectation. |
 | `deploy/camunda-chart` | models | A chart archive other than the locked one, a tag-only image, demo users, an inline secret, a component other than the orchestration cluster. |
 | publication guardrails | publication-guardrails | Local paths, personal addresses and secret-like literals in published files. |
 
-Every job runs on `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`.
+Every job runs on GitHub-hosted runners (`ubuntu-latest`, and `ubuntu-24.04-arm` for `ci/test-arm64`).
+The repository is public, so no self-hosted runner is ever attached to it and no workflow uses a secret.
 
 ## Contributing
 

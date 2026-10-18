@@ -12,7 +12,7 @@ helm 3.19.0, gitleaks 8.24.3. Head: the commit that adds this file.
 | catalog pins | `bash scripts/ci/check-catalog-pins.sh` | 0 | 8 job types checked. Red checks: unknown operation, pin without pinned expectation, pinned without pin → exit 1 |
 | guardrails | publication-guardrails steps, fixture self-test, gitleaks workspace scan | 0 | no findings |
 
-POT1-RUNNER is open: it needs this repository in the fbx-ci runner's REPOS list and `CI_RUNNER` set.
+POT1-RUNNER is open until the first push runs `ci/test-arm64` on the GitHub-hosted arm64 image.
 
 ## Re-run after the DevSecOps review of 3f62cc7
 

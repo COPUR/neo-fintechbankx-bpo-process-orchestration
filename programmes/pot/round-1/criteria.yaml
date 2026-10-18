@@ -23,6 +23,6 @@ criteria:
     claim: the proposed rule refuses Camunda in a domain class and passes a clean one
     check: ./gradlew :archunit-no-camunda:test
   - id: POT1-RUNNER
-    claim: the same checks pass on the fbx-ci arm64 runner
+    claim: the same checks pass on arm64 (ci/test-arm64, GitHub-hosted; no self-hosted runner on a public repository)
     check: required-gates and models workflows green on the PR head
-    status: waits for this repo in the runner REPOS list and CI_RUNNER set
+    status: waits for the first push
