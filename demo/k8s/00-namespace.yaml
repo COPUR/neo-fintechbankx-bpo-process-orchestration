@@ -1,0 +1,10 @@
+# Local POC/POT demo of the TR FAST exception path (P2). Throwaway cluster only; synthetic data only.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bpo-demo-tr
+  labels:
+    app.kubernetes.io/part-of: bpo-demo
+    fintechbankx.io/jurisdiction: TR
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
