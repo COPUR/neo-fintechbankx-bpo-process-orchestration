@@ -57,7 +57,7 @@ subprojects {
 
 // The simulator and the process tests are test code even though the simulator has a main source set. No
 // deployable module may carry them outside its test classpaths (DevSecOps S-12).
-def testOnlyModules = ['domain-simulator', 'cpt', 'archunit-no-camunda']
+def testOnlyModules = ['domain-simulator', 'cpt', 'archunit-no-camunda', 'payments-demo']
 def deployableModules = ['bpo-worker-kit', 'bpo-worker-onboarding', 'bpo-worker-payments', 'bpo-process-api']
 configure(subprojects.findAll { it.name in deployableModules }) { p ->
     def verify = p.tasks.register('verifyNoTestOnlyModules') {

@@ -39,6 +39,9 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:formDefinition formId="cmp-review-analyst-decision" bindingType="deployment" />
+        <zeebe:ioMapping>
+          <zeebe:output source="=reviewDecision" target="reviewDecision" />
+        </zeebe:ioMapping>
         <zeebe:assignmentDefinition candidateGroups="=[routing.reviewQueue]" />
         <zeebe:taskSchedule dueDate="=now() + duration(routing.reviewSla)" />
       </bpmn:extensionElements>
@@ -65,6 +68,9 @@
       <bpmn:extensionElements>
         <zeebe:userTask />
         <zeebe:formDefinition formId="cmp-review-senior-decision" bindingType="deployment" />
+        <zeebe:ioMapping>
+          <zeebe:output source="=reviewDecision" target="reviewDecision" />
+        </zeebe:ioMapping>
         <zeebe:assignmentDefinition candidateGroups="=[routing.escalationQueue]" />
         <zeebe:taskSchedule dueDate="=now() + duration(routing.escalationSla)" />
       </bpmn:extensionElements>

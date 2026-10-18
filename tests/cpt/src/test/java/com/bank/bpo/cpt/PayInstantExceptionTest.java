@@ -199,6 +199,23 @@ class PayInstantExceptionTest {
     }
 
     @Test
+    void aCompletionThatAlsoSendsABusinessKeyChangesOnlyTheDecision() {
+        SIM.schemeStatuses("pay-ops-5", "PDNG");
+
+        ProcessInstanceEvent instance = start("pay-ops-5");
+        letEveryWaitPass();
+        assertThat(instance).isActive().hasActiveElements("Task_OpsReview");
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"),
+            Map.of("exceptionDecision", "SETTLED", "paymentId", "pay-other-1", "jurisdiction", "AE", "rail", "AANI"));
+
+        assertThat(instance).isCompleted().hasCompletedElements("Task_CaptureHold", "EndEvent_Settled")
+            .hasVariable("paymentId", "pay-ops-5").hasVariable("jurisdiction", "TR").hasVariable("rail", "FAST");
+        assertThat(SIM.callsTo("/api/v1/holds/pay-ops-5/capture")).hasSize(1);
+        assertThat(SIM.callsTo("/api/v1/holds/pay-other-1/capture")).isEmpty();
+        assertThat(SIM.exceptionDecisionRecordedFor("pay-other-1")).isNull();
+    }
+
+    @Test
     void anEscalationGoesToTheSupervisorQueue() {
         SIM.schemeStatuses("pay-ops-3", "PDNG");
 

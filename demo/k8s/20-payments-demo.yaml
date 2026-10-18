@@ -1,0 +1,62 @@
+# The real payments workers (job types psg.status-inquiry, acc.capture-hold, acc.release-hold, pay.*, ntf.notify-payment)
+# with the domain simulator in the same JVM on the loopback address: psg-tr, pay, ntf and the acc holds are
+# simulated, nothing else is reachable. Scheme answers per synthetic payment come from the ConfigMap demo-scenarios.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bpo-payments-demo
+  namespace: bpo-demo-tr
+  labels: {app.kubernetes.io/name: bpo-payments-demo, app.kubernetes.io/part-of: bpo-demo}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: bpo-payments-demo}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: bpo-payments-demo, app.kubernetes.io/part-of: bpo-demo}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: wait-for-camunda
+          image: curlimages/curl:8.16.0@sha256:463eaf6072688fe96ac64fa623fe73e1dbe25d8ad6c34404a669ad3ce1f104b6
+          command: ["sh", "-c", "until curl -sf -o /dev/null -u \"presenter:$CRED\" http://camunda:8080/v2/topology; do sleep 3; done"]
+          env:
+            - name: CRED
+              valueFrom: {secretKeyRef: {name: camunda-presenter, key: credential}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+      containers:
+        - name: worker
+          image: bpo-payments-demo:local
+          imagePullPolicy: Never
+          env:
+            - {name: BPO_DEMO_ACK, value: synthetic-data-only}
+            - {name: BPO_DEMO_SCENARIOS, value: /config/scenarios.json}
+            - {name: CAMUNDA_CLIENT_MODE, value: self-managed}
+            - {name: CAMUNDA_CLIENT_REST_ADDRESS, value: "http://camunda:8080"}
+            - {name: CAMUNDA_CLIENT_GRPC_ADDRESS, value: "http://camunda:26500"}
+            - {name: CAMUNDA_CLIENT_AUTH_METHOD, value: basic}
+            - {name: CAMUNDA_CLIENT_AUTH_USERNAME, value: presenter}
+            - name: CAMUNDA_CLIENT_AUTH_PASSWORD
+              valueFrom: {secretKeyRef: {name: camunda-presenter, key: credential}}
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: scenarios, mountPath: /config, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: scenarios
+          configMap: {name: demo-scenarios}
+        - {name: tmp, emptyDir: {}}

@@ -412,7 +412,8 @@ public final class DomainSimulator implements AutoCloseable {
                 m.matches();
                 String decision = String.valueOf(body.get("decision"));
                 exceptionDecisionByPayment.put(m.group(1), decision);
-                // pay's rule stands in here: SETTLED settles, REJECTED releases, EXPIRED hands the payment back.
+                // A test stand-in, not pay's contract: it maps the decision without the check against the gateway's
+                // record that pay must make (contracts/expectations/pay.yaml recordExceptionDecision, still requested).
                 String outcome = switch (decision) {
                     case "SETTLED" -> "SETTLE";
                     case "REJECTED" -> "RELEASE";
