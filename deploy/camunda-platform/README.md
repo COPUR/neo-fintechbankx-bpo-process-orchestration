@@ -17,6 +17,8 @@ Platform names them.
 environment and refuses tag-only images, the chart's demo users, inline secrets and any workload
 other than the orchestration cluster.
 
-Open point for Platform: the chart's helpers use `lookup` to read a TLS certificate secret when a
-`certRef` is configured. These values configure none, so nothing renders through it; the platform
-render guard rule "no `lookup`" needs a decision for the vendor chart before TLS refs are added.
+`lookup` (ADR 0003): in chart 15.1.1 the only templates that call `lookup` are the TLS checksum
+annotations, and each runs only when its `global.tls.*.autoRollout` flag is true. `values-common.yaml`
+pins all four flags to false and the render script refuses a values file that turns one on, so the
+deploy identity needs no `get` on Secrets. Camunda's own TLS stays off; transport security is the mesh
+(ADR 0002). A certificate rotation, if chart TLS is ever enabled, is a `kubectl rollout restart`.

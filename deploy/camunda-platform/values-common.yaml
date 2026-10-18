@@ -17,6 +17,17 @@ global:
     secret:
       existingSecret: camunda-license
       existingSecretKey: license-key
+  # ADR 0003: the chart's only `lookup` calls sit behind these flags. They stay off, so the
+  # deploy identity never reads Secrets; certificate rotation is a rollout restart.
+  tls:
+    caBundle:
+      autoRollout: false
+    orchestration:
+      autoRollout: false
+    connectors:
+      autoRollout: false
+    optimize:
+      autoRollout: false
 
 orchestration:
   enabled: true

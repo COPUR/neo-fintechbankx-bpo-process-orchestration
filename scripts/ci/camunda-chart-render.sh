@@ -4,6 +4,7 @@
 #   - a chart version outside the locked range, or an archive whose sha256 differs;
 #   - any container image that is not pinned by digest;
 #   - the chart's demo users, or any inline secret value;
+#   - any TLS autoRollout flag switched on: those are the chart's only `lookup` calls (ADR 0003);
 #   - Connectors, Web Modeler, Hub, Identity or Optimize switched on;
 #   - anything reachable from outside the cluster (Ingress, Route, HTTPRoute, GRPCRoute, a LoadBalancer or
 #     NodePort Service) and any Secret object: secrets come from the secret store, never from the chart.
@@ -74,6 +75,16 @@ for env_file in "$dir"/values-*.yaml; do
     echo "$env: a Service is exposed as LoadBalancer or NodePort" >&2; fail=1
   fi
   echo "$env: rendered $(grep -c '^kind:' "$out") resources"
+done
+
+# ADR 0003: lookup needs Secret get for the deploy identity, which the platform deploy Role does not have.
+if grep -nE 'autoRollout: *"?(true|yes|on)"?' "$dir"/values-*.yaml; then
+  echo "values files switch on a TLS autoRollout flag (the chart would call lookup)" >&2; fail=1
+fi
+for f in caBundle orchestration connectors optimize; do
+  if ! grep -A2 -E "^    $f:" "$dir/values-common.yaml" | grep -qE 'autoRollout: false'; then
+    echo "values-common.yaml must pin global.tls.$f.autoRollout: false" >&2; fail=1
+  fi
 done
 
 if grep -nE 'inlineSecret: *"?[^" ]+' "$dir"/values-*.yaml; then
