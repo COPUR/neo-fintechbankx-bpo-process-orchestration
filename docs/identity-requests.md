@@ -25,3 +25,12 @@ Provider audiences for `svc-bpo-worker-onboarding` (the existing client ids, so 
 Groups for user tasks, from `cmp-review-routing`: `cmp-ae-onboarding-l1`, `cmp-ae-mlro`,
 `cmp-tr-onboarding-l1`, `cmp-tr-compliance-officer`, `cmp-review-l1`, `cmp-review-l2`.
 The engine reads groups from the token; the claim name is set when the realm adds the mapper.
+
+Caller allow-list entries the providers add (`azp` values). Only the onboarding worker calls providers;
+`camunda-orchestration` is the engine's own client and calls no provider, so it is on no allow-list.
+
+| Provider | Audience the token carries | `azp` to allow |
+|---|---|---|
+| cus | `svc-cus-profile-kyc` | `svc-bpo-worker-onboarding` |
+| cmp | `svc-cmp-evidence` | `svc-bpo-worker-onboarding` |
+| acc | `svc-acc-accounts-ledger` | `svc-bpo-worker-onboarding` |

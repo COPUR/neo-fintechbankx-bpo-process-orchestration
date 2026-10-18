@@ -4,6 +4,7 @@
 #   - a chart version outside the locked range, or an archive whose sha256 differs;
 #   - any container image that is not pinned by digest;
 #   - the chart's demo users, or any inline secret value;
+#   - any TLS autoRollout flag switched on: those are the chart's only `lookup` calls (ADR 0003);
 #   - Connectors, Web Modeler, Hub, Identity or Optimize switched on;
 #   - anything reachable from outside the cluster (Ingress, Route, HTTPRoute, GRPCRoute, a LoadBalancer or
 #     NodePort Service) and any Secret object: secrets come from the secret store, never from the chart.
@@ -75,6 +76,9 @@ for env_file in "$dir"/values-*.yaml; do
   fi
   echo "$env: rendered $(grep -c '^kind:' "$out") resources"
 done
+
+# ADR 0003: values must keep the chart's lookup paths switched off.
+bash "$root/scripts/ci/check-camunda-autorollout.sh" "$dir" || fail=1
 
 if grep -nE 'inlineSecret: *"?[^" ]+' "$dir"/values-*.yaml; then
   echo "values files carry an inline secret" >&2; fail=1
