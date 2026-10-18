@@ -232,6 +232,27 @@ class PayInstantExceptionTest {
     }
 
     @Test
+    void aSupervisorWhoFindsTheRecordUnclearHandsThePaymentBackAndNoMoneyMoves() {
+        SIM.schemeStatuses("pay-ops-6", "PDNG");
+
+        ProcessInstanceEvent instance = start("pay-ops-6");
+        letEveryWaitPass();
+        assertThat(instance).isActive().hasActiveElements("Task_OpsReview");
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "ESCALATE"));
+        assertThat(instance).isActive().hasActiveElements("Task_SupervisorReview");
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_SupervisorReview"), Map.of("exceptionDecision", "UNRESOLVED"));
+
+        assertThat(instance).isCompleted()
+            .hasCompletedElements("Task_SupervisorReview", "Task_RecordExceptionDecision", "EndEvent_HandedBack")
+            .hasNotActivatedElements("Event_DecisionExpired", "Task_CaptureHold", "Task_ReleaseHold")
+            .hasVariable("exceptionOutcome", "HANDED_BACK");
+        assertThat(SIM.exceptionDecisionRecordedFor("pay-ops-6")).isEqualTo("UNRESOLVED");
+        assertThat(SIM.holdsCaptured()).isZero();
+        assertThat(SIM.holdsReleased("pay-ops-6")).isZero();
+        assertThat(notifications("PAYMENT_SETTLED") + notifications("PAYMENT_REJECTED")).isZero();
+    }
+
+    @Test
     void whenNobodyDecidesPayTakesThePaymentBackAndNoMoneyMoves() {
         SIM.schemeStatuses("pay-ops-4", "PDNG");
 

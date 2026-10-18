@@ -16,7 +16,8 @@
       "validate": { "required": true },
       "values": [
         { "label": "Settled at the scheme", "value": "SETTLED" },
-        { "label": "Rejected at the scheme", "value": "REJECTED" }
+        { "label": "Rejected at the scheme", "value": "REJECTED" },
+        { "label": "Scheme record unclear: hand the payment back to pay (the hold stays)", "value": "UNRESOLVED" }
       ]
     }
   ]

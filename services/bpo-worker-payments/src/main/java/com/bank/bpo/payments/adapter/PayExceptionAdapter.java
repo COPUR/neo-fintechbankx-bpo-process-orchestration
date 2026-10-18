@@ -9,7 +9,7 @@ import java.util.Set;
 /** pay payment exceptions: record the decision, mark settled or rejected (contracts/expectations/pay.yaml). */
 public final class PayExceptionAdapter implements PaymentExceptionPort {
 
-    private static final Set<String> DECISIONS = Set.of("SETTLED", "REJECTED", "EXPIRED");
+    private static final Set<String> DECISIONS = Set.of("SETTLED", "REJECTED", "UNRESOLVED", "EXPIRED");
     private static final Set<String> OUTCOMES = Set.of("SETTLE", "RELEASE", "HANDED_BACK");
     private final ProviderHttp http;
 

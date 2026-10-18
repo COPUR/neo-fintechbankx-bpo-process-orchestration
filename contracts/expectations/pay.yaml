@@ -10,9 +10,9 @@ operations:
     path: /api/v1/payments/{paymentId}/exception/decision
     idempotencyKey: "<paymentId>:record-exception-decision"
     caller: svc-bpo-worker-payments
-    request: {decision: [SETTLED, REJECTED, EXPIRED]}
+    request: {decision: [SETTLED, REJECTED, UNRESOLVED, EXPIRED]}
     response: {outcome: [SETTLE, RELEASE, HANDED_BACK]}
-    rule: pay checks the decision against the gateway's record and answers HANDED_BACK when they disagree or the decision is EXPIRED; HANDED_BACK leaves EXCEPTION_OWNED_BY_BPO and the hold untouched
+    rule: pay checks the decision against the gateway's record and answers HANDED_BACK when they disagree or the decision is UNRESOLVED (a supervisor found the scheme record unclear) or EXPIRED (nobody decided); HANDED_BACK leaves EXCEPTION_OWNED_BY_BPO and the hold untouched
     goLive: P2 captures the hold on SETTLE and trusts this answer; until pay implements and publishes this rule, a human SETTLED decision alone would move money, so the payments worker is not deployed against a real pay URL before then (docs/packages/tr-fast.md, go-live conditions).
   markExceptionSettled:
     status: requested

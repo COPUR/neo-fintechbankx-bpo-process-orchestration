@@ -52,8 +52,10 @@ repositories this programme can reach; creating it is the repository owner's ste
 4. RJCT: `acc` releases the hold (`<paymentId>:release`), `pay` is marked rejected, the customer is notified.
 5. Still pending after the last read: `pay-exception-routing` picks the queue (`pay-tr-fast-ops`, then
    `pay-tr-fast-supervisor`). The decision goes to `pay`, which checks it against the gateway's record and
-   answers SETTLE, RELEASE or HANDED_BACK. Nobody deciding in time is EXPIRED, which `pay` answers with
-   HANDED_BACK: no money moves and the payment leaves bpo's ownership.
+   answers SETTLE, RELEASE or HANDED_BACK. A supervisor who finds the scheme record unclear says so with
+   UNRESOLVED; nobody deciding in time is EXPIRED. `pay` answers both with HANDED_BACK: no money moves, the hold
+   stays and the payment leaves bpo's ownership. Who decided UNRESOLVED stays in the engine's user-task record;
+   passing the deciding person to `pay` waits for `bpo-process-api`.
 6. A hold that already lapsed (410 `HOLD_EXPIRED`), an unknown status, a crafted id or a rail without a
    gateway stops the instance on an incident. Nothing is guessed.
 

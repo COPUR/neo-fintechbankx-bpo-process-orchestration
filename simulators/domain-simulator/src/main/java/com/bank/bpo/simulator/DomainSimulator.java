@@ -295,7 +295,7 @@ public final class DomainSimulator implements AutoCloseable {
     private static final List<String> REVIEW_DECISIONS = List.of("CLEAR", "REJECT", "EXPIRED");
     private static final List<String> REJECTION_REASONS = List.of("KYC_REJECTED", "KYC_TIMEOUT", "SCREENING_REJECTED");
     private static final List<String> PURPOSES = List.of("ACCOUNT_OPENED", "ACCOUNT_APPLICATION_REJECTED", "PAYMENT_SETTLED", "PAYMENT_REJECTED");
-    private static final List<String> EXCEPTION_DECISIONS = List.of("SETTLED", "REJECTED", "EXPIRED");
+    private static final List<String> EXCEPTION_DECISIONS = List.of("SETTLED", "REJECTED", "UNRESOLVED", "EXPIRED");
 
     /** The request fields contracts/expectations names for each operation; the first one missing or out of range. */
     private static String missingField(String operation, Map<String, Object> body) {
