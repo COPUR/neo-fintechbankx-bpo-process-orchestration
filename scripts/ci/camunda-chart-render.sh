@@ -77,15 +77,8 @@ for env_file in "$dir"/values-*.yaml; do
   echo "$env: rendered $(grep -c '^kind:' "$out") resources"
 done
 
-# ADR 0003: lookup needs Secret get for the deploy identity, which the platform deploy Role does not have.
-if grep -nE 'autoRollout: *"?(true|yes|on)"?' "$dir"/values-*.yaml; then
-  echo "values files switch on a TLS autoRollout flag (the chart would call lookup)" >&2; fail=1
-fi
-for f in caBundle orchestration connectors optimize; do
-  if ! grep -A2 -E "^    $f:" "$dir/values-common.yaml" | grep -qE 'autoRollout: false'; then
-    echo "values-common.yaml must pin global.tls.$f.autoRollout: false" >&2; fail=1
-  fi
-done
+# ADR 0003: values must keep the chart's lookup paths switched off.
+bash "$root/scripts/ci/check-camunda-autorollout.sh" "$dir" || fail=1
 
 if grep -nE 'inlineSecret: *"?[^" ]+' "$dir"/values-*.yaml; then
   echo "values files carry an inline secret" >&2; fail=1

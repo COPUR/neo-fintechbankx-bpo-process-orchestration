@@ -19,6 +19,7 @@ other than the orchestration cluster.
 
 `lookup` (ADR 0003): in chart 15.1.1 the only templates that call `lookup` are the TLS checksum
 annotations, and each runs only when its `global.tls.*.autoRollout` flag is true. `values-common.yaml`
-pins all four flags to false and the render script refuses a values file that turns one on, so the
-deploy identity needs no `get` on Secrets. Camunda's own TLS stays off; transport security is the mesh
+pins all four flags to false and the render script refuses a values file that turns one on. The platform side (deploy Role without
+Secret access, `HELM_DRIVER=configmap`, a guard refusing `lookup`) is proposed in
+fintechbankx-platform-delivery-iac-cicd-templates PR #11 and fintechbankx-platform-mesh-security-service-mesh PR #11 and is not merged; this decision depends on them. Camunda's own TLS stays off; transport security is the mesh
 (ADR 0002). A certificate rotation, if chart TLS is ever enabled, is a `kubectl rollout restart`.

@@ -50,5 +50,8 @@ jobs:
         with:
           version: v3.19.0
 
+      - name: Test the autoRollout guard
+        run: bash scripts/ci/test-camunda-autorollout.sh
+
       - name: Render the locked chart for every environment
         run: bash scripts/ci/camunda-chart-render.sh
