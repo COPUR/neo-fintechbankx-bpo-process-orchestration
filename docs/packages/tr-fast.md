@@ -61,6 +61,38 @@ The instance holds `paymentId`, `jurisdiction`, `rail`, `schemeStatus`, `journal
 routing and decision enums. No amount, IBAN, alias, name or ISO 20022 body enters Camunda (05 §5.1); the CPT
 suite checks the variable list and the size.
 
+## Hypotheses and success metrics
+
+Each process is a bet that Camunda closes a case class faster or safer than people working from the payments
+operations view. Every baseline is unknown: no provider operation exists yet, so nothing has been measured. The
+first month after a process goes live sets the baseline; the target is then agreed with the operations owner.
+
+| Process | Hypothesis | Success metric | Baseline |
+|---|---|---|---|
+| P2 `pay-instant-exception` | Most unanswered FAST payments resolve from the scheme's own record, without a person | Share of `Payment.ExceptionRaised` cases on FAST closed SETTLE or RELEASE by the status inquiry, with no user task, within 10 minutes | unknown |
+| P6 `pay-return-recall` (TR) | A tracked return request with deadlines gets more misdirected credits back than email and phone | Share of return requests answered by the receiving bank before the deadline; median days to money back | unknown |
+| `tr-siper-fraud-case` | A case with SLAs and four-eyes on blocks shortens the time a fraud-related amount stays blocked without a decision | Median hours from SİPER notification to block decision; share of blocks released or confirmed inside the SLA | unknown |
+| P8 `pay-safe-payment-escrow` | Timers on held funds stop escrow amounts from staying held past their release or refund date | Number of escrow holds still open after their deadline; share released or refunded automatically | unknown |
+| P7 `rtp-lifecycle` (TR) | A request-to-pay that expires or is answered in parts closes cleanly instead of staying open | Share of requests ending in a terminal state (paid, partly paid, declined, expired) with no manual close | unknown |
+| `tr-scheme-incident` | A guided incident flow sends customer and regulator notices on time during a FAST or BKM outage | Minutes from monitoring alarm to the first required notice; share of incidents with a closing report | unknown |
+| P9 `liq-prefunding-topup` (TR) | A threshold event with an approval step tops up the TCMB account before payments are refused | Number of payments refused for liquidity per month; minutes from threshold event to top-up | unknown |
+| P24 `recon-break-resolution` | Routing each FAST end-of-day break to an owner with an SLA clears breaks before the next cycle | Share of breaks closed before the next end of day; age of the oldest open break | unknown |
+
+## Order of the later rounds
+
+Ordered by money at risk and by how much is still unknown, so the riskiest open questions are answered first.
+P9 and P24 come last because their owning contexts (`liq`, `reconciliation`) do not exist yet.
+
+| Order | Process | Money at risk | Uncertainty | Why here |
+|---|---|---|---|---|
+| 1 | P6 return, recall, misdirected credit | High: money already left the bank | High: no FAST return message confirmed (08 §2.1) | Most money exposed and the biggest unknown in the rail's rules |
+| 2 | `tr-siper-fraud-case` | High: blocks on customer funds | High: risk flag, block authority and block duration unverified (08 §2.6) | Regulator-facing, needs four-eyes, calls P6 |
+| 3 | P8 Güvenli Ödeme escrow | Medium: funds held for days | Medium: registration channel and refund period unverified (08 §2.5) | Builds on the ledger hold already used by P2 |
+| 4 | P7 Ödeme İste | Low: a request moves no money | Medium: partial and early payment support unverified (GTR-10) | Customer-visible, but failure only leaves a request open |
+| 5 | `tr-scheme-incident` | None directly | Medium: target values unverified (08 §2.1) | Notices and reports, no money step |
+| 6 | P9 TCMB liquidity top-up | High | High: mechanism unverified; `liq` does not exist | Blocked on a new context |
+| 7 | P24 FAST reconciliation breaks | Medium | High: report format unverified; `reconciliation` does not exist | Blocked on a new context |
+
 ## What P2 needs from other repositories
 
 | Provider | Operation or event | Expectation | Owner |
