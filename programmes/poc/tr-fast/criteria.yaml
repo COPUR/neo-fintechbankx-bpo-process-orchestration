@@ -1,0 +1,20 @@
+round: poc-tr-fast-1
+status: proposed
+entry: POT TR FAST round 1 exited; acc captureHold and releaseHold published
+criteria:
+  - id: POC-TRF-SETTLED
+    claim: a settled FAST instruction captures the hold once in the real ledger and pay is marked settled
+    check: not written yet (needs the acc holds)
+    status: planned
+  - id: POC-TRF-REJECTED
+    claim: a rejected instruction releases the hold and writes no journal entry
+    check: not written yet (needs the acc holds)
+    status: planned
+  - id: POC-TRF-PENDING
+    claim: a status still unknown after the last read reaches the TR FAST queue and nobody deciding hands the payment back with no money moved
+    check: not written yet
+    status: planned
+  - id: POC-TRF-REPLAY
+    claim: a lost response on capture retries with the same key and the ledger holds one journal entry
+    check: not written yet (needs the acc holds)
+    status: planned
