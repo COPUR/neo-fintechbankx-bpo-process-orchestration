@@ -1,22 +1,26 @@
 round: pot-tr-fast-1
-status: proposed
+# status per criterion: runnable (the check runs on a clean checkout today) or planned (check not written yet)
 criteria:
   - id: POT-TRF-LINT
     claim: every model passes the lint with 0 errors and the lint rules are tested red and green
-    check: npm test --prefix lint && npm run lint --prefix lint
+    check: npm ci --prefix lint && npm test --prefix lint && npm run lint --prefix lint
+    status: runnable
   - id: POT-TRF-CPT
     claim: every P2 path passes on Camunda 8.10.4 against the domain simulator
     check: ./gradlew :bpo-worker-payments:test :cpt:test --tests '*PayInstantExceptionTest*'
+    status: runnable
   - id: POT-TRF-VARS
     claim: a P2 instance holds only allow-listed ids and enums, under 8 KB, and no amount, IBAN, alias or name
     check: ./gradlew :cpt:test --tests '*PayInstantExceptionTest*'
+    status: runnable
   - id: POT-TRF-CHART
     claim: the locked chart renders for the TR values with digests only and no demo users
     check: bash scripts/ci/camunda-chart-render.sh
+    status: runnable
   - id: POT-TRF-ARM64
     claim: the same checks pass on arm64 (GitHub-hosted; no self-hosted runner on a public repository)
     check: required-gates and models workflows green on the PR head
-    status: waits for a push
+    status: planned
   - id: POT-TRF-TIMERS
     claim: concurrent P2 instances with up to three timers each finish with 0 incidents on dev-tr
     check: not written yet (needs the dev installation of POT round 2)
