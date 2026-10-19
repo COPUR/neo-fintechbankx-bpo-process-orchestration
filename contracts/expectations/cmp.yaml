@@ -22,5 +22,6 @@ operations:
     method: POST
     path: /api/v1/compliance/review-cases/{caseId}/decision
     idempotencyKey: "<caseId>:record-decision"
-    request: {decision: [CLEAR, REJECT, EXPIRED]}
+    request: {decision: [CLEAR, REJECT, EXPIRED], reason: [OTHER, SLA_EXPIRED]}
+    requestRule: the body is exactly decision and reason (anything else is refused, BODY_NOT_ALLOWED); reason is a code, never free text; SLA_EXPIRED goes with EXPIRED and nothing else, and EXPIRED with nothing but SLA_EXPIRED (REASON_NOT_ALLOWED); OTHER is the only human code until this owner supplies its own
     response: {outcome: [CLEARED, REJECTED]}

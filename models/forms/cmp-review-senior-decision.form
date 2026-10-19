@@ -18,6 +18,16 @@
         { "label": "Clear", "value": "CLEAR" },
         { "label": "Reject", "value": "REJECT" }
       ]
+    },
+    {
+      "type": "radio",
+      "id": "Field_DecisionReason",
+      "key": "decisionReason",
+      "label": "Reason",
+      "validate": { "required": true },
+      "values": [
+        { "label": "Other", "value": "OTHER" }
+      ]
     }
   ]
 }

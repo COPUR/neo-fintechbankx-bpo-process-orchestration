@@ -19,6 +19,16 @@
         { "label": "Rejected at the scheme", "value": "REJECTED" },
         { "label": "Scheme record unclear: hand the payment back to pay (the hold stays)", "value": "UNRESOLVED" }
       ]
+    },
+    {
+      "type": "radio",
+      "id": "Field_DecisionReason",
+      "key": "decisionReason",
+      "label": "Reason",
+      "validate": { "required": true },
+      "values": [
+        { "label": "Other", "value": "OTHER" }
+      ]
     }
   ]
 }

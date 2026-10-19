@@ -28,6 +28,7 @@ variables:
   statusSignal: {kind: enum, values: [RECEIVED], note: set by Msg_SchemeStatusReported itself; the message payload is never merged}
   exceptionRouting: {kind: dmn-output, note: "pay-exception-routing result: opsQueue, opsSla, supervisorQueue, supervisorSla"}
   exceptionDecision: {kind: enum, values: [SETTLED, REJECTED, ESCALATE, UNRESOLVED, EXPIRED], note: set by the ops user tasks (UNRESOLVED by the supervisor only) or the SLA expiry}
+  decisionReason: {kind: reason-code, values: [OTHER, SLA_EXPIRED], system_only: [SLA_EXPIRED], note: coded reason a person picks with a review or exception decision (U4); humans are offered OTHER until the cmp and pay owners supply their codes; SLA_EXPIRED is set only by the SLA expiry events and never offered on a form}
   exceptionOutcome: {kind: enum, values: [SETTLE, RELEASE, HANDED_BACK], note: pay's recorded outcome; pay checks the decision against psg's record}
   journalRef: {kind: reference, owner: acc, note: the capture journal entry (P2) or the return credit (P6)}
   recallPolicy: {kind: dmn-output, owner: pay-recall-policy, note: firstWait and finalWait durations only}

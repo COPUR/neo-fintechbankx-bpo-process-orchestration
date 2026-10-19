@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -64,11 +65,13 @@ public final class DomainSimulator implements AutoCloseable {
     private final Map<String, Map<String, Object>> openBodyByKey = new HashMap<>();
     private final Map<String, String> applicationByCase = new HashMap<>();
     private final Map<String, String> decisionByCase = new HashMap<>();
+    private final Map<String, String> reasonByCase = new HashMap<>();
     private final Map<String, List<String>> schemeStatusesByPayment = new HashMap<>();
     private final Map<String, Map<String, Object>> capturedByKey = new LinkedHashMap<>();
     private final Map<String, Map<String, Object>> captureBodyByKey = new HashMap<>();
     private final Map<String, Integer> releasesByPayment = new HashMap<>();
     private final Map<String, String> exceptionDecisionByPayment = new HashMap<>();
+    private final Map<String, String> exceptionReasonByPayment = new HashMap<>();
     private final Map<String, List<String>> recallStatusesByPayment = new HashMap<>();
     private final Map<String, Integer> recallRequestsByPayment = new HashMap<>();
     private final Map<String, Map<String, Object>> returnsAppliedByKey = new LinkedHashMap<>();
@@ -178,11 +181,13 @@ public final class DomainSimulator implements AutoCloseable {
         openBodyByKey.clear();
         applicationByCase.clear();
         decisionByCase.clear();
+        reasonByCase.clear();
         schemeStatusesByPayment.clear();
         capturedByKey.clear();
         captureBodyByKey.clear();
         releasesByPayment.clear();
         exceptionDecisionByPayment.clear();
+        exceptionReasonByPayment.clear();
         recallStatusesByPayment.clear();
         recallRequestsByPayment.clear();
         returnsAppliedByKey.clear();
@@ -230,8 +235,18 @@ public final class DomainSimulator implements AutoCloseable {
         return exceptionDecisionByPayment.get(paymentId);
     }
 
+    public synchronized String exceptionReasonRecordedFor(String paymentId) {
+        return exceptionReasonByPayment.get(paymentId);
+    }
+
     public synchronized String decisionRecordedFor(String applicationId) {
         return decisionByCase.entrySet().stream()
+            .filter((e) -> applicationId.equals(applicationByCase.get(e.getKey())))
+            .map(Map.Entry::getValue).findFirst().orElse(null);
+    }
+
+    public synchronized String reasonRecordedFor(String applicationId) {
+        return reasonByCase.entrySet().stream()
             .filter((e) -> applicationId.equals(applicationByCase.get(e.getKey())))
             .map(Map.Entry::getValue).findFirst().orElse(null);
     }
@@ -336,6 +351,7 @@ public final class DomainSimulator implements AutoCloseable {
         "RECALL_RETURNED", "RECALL_UNRESOLVED");
     private static final List<String> RECALL_OUTCOMES = List.of("RETURNED", "UNRESOLVED");
     private static final List<String> EXCEPTION_DECISIONS = List.of("SETTLED", "REJECTED", "UNRESOLVED", "EXPIRED");
+    private static final List<String> HUMAN_REASONS = List.of("OTHER");
 
     /** The request fields contracts/expectations names for each operation; the first one missing or out of range. */
     private static String missingField(String operation, Map<String, Object> body) {
@@ -344,16 +360,32 @@ public final class DomainSimulator implements AutoCloseable {
             case "open-review-case" -> firstMissing(body, "screeningId", "sourceRef", "sourceProcess", "jurisdiction") != null
                 ? firstMissing(body, "screeningId", "sourceRef", "sourceProcess", "jurisdiction")
                 : JURISDICTIONS.contains(body.get("jurisdiction")) ? null : "jurisdiction";
-            case "record-review-decision" -> REVIEW_DECISIONS.contains(body.get("decision")) ? null : "decision";
+            case "record-review-decision" -> decisionBody(body, REVIEW_DECISIONS);
             case "reject-application" -> REJECTION_REASONS.contains(body.get("rejectionReason")) ? null : "rejectionReason";
             case "alias-offer" -> firstMissing(body, "applicationId", "accountId");
-            case "record-exception-decision" -> EXCEPTION_DECISIONS.contains(body.get("decision")) ? null : "decision";
+            case "record-exception-decision" -> decisionBody(body, EXCEPTION_DECISIONS);
             case "mark-settled" -> firstMissing(body, "journalRef");
             case "close-recall" -> RECALL_OUTCOMES.contains(body.get("outcome")) ? null : "outcome";
             case "notify" -> firstMissing(body, "subjectRef") != null ? "subjectRef"
                 : PURPOSES.contains(body.get("purpose")) ? null : "purpose";
             default -> null;
         };
+    }
+
+    /**
+     * A decision body is exactly {decision, reason} (U4): a coded reason, never free text; SLA_EXPIRED goes with the
+     * expiry decision and nothing else, and the expiry decision with nothing but SLA_EXPIRED.
+     */
+    private static String decisionBody(Map<String, Object> body, List<String> decisions) {
+        if (!Set.of("decision", "reason").equals(body.keySet())) {
+            return "body";
+        }
+        if (!decisions.contains(body.get("decision"))) {
+            return "decision";
+        }
+        Object reason = body.get("reason");
+        boolean allowed = "EXPIRED".equals(body.get("decision")) ? "SLA_EXPIRED".equals(reason) : HUMAN_REASONS.contains(reason);
+        return allowed ? null : "reason";
     }
 
     private static String firstMissing(Map<String, Object> body, String... fields) {
@@ -396,6 +428,7 @@ public final class DomainSimulator implements AutoCloseable {
                 m.matches();
                 String decision = String.valueOf(body.get("decision"));
                 decisionByCase.put(m.group(1), decision);
+                reasonByCase.put(m.group(1), String.valueOf(body.get("reason")));
                 // Fail closed: only an explicit CLEAR clears; REJECT, ESCALATE and EXPIRED do not.
                 return new Reply(200, Map.of("outcome", decision.equals("CLEAR") ? "CLEARED" : "REJECTED"));
             }
@@ -453,6 +486,7 @@ public final class DomainSimulator implements AutoCloseable {
                 m.matches();
                 String decision = String.valueOf(body.get("decision"));
                 exceptionDecisionByPayment.put(m.group(1), decision);
+                exceptionReasonByPayment.put(m.group(1), String.valueOf(body.get("reason")));
                 // A test stand-in, not pay's contract: it maps the decision without the check against the gateway's
                 // record that pay must make (contracts/expectations/pay.yaml recordExceptionDecision, still requested).
                 String outcome = switch (decision) {

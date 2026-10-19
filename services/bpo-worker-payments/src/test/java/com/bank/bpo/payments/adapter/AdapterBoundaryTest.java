@@ -2,7 +2,9 @@ package com.bank.bpo.payments.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.assertj.core.api.Assertions.entry;
 
+import com.bank.bpo.payments.port.PaymentExceptionPort;
 import com.bank.bpo.payments.port.PaymentRecallPort;
 import com.bank.bpo.simulator.DomainSimulator;
 import com.bank.bpo.workerkit.ProviderException;
@@ -54,7 +56,7 @@ class AdapterBoundaryTest {
             (id) -> psg.statusOf("FAST", id),
             (id) -> acc.capture(id, "k"),
             (id) -> acc.release(id, "k"),
-            (id) -> pay.record(id, "SETTLED", "k"),
+            (id) -> pay.record(id, "SETTLED", "OTHER", "k"),
             (id) -> pay.markSettled(id, "jr-1", "k"),
             (id) -> pay.markSettled("pay-1", id, "k"),
             (id) -> pay.markRejected(id, "k"),
@@ -101,28 +103,49 @@ class AdapterBoundaryTest {
         SIM.answerRaw("scheme-status", 200, "{\"schemeStatus\":\"ACCP\"}", 1);
         contractFault(() -> psg.statusOf("FAST", "pay-1"));
         SIM.answerRaw("record-exception-decision", 200, "{\"outcome\":\"MAYBE\"}", 1);
-        contractFault(() -> pay.record("pay-1", "SETTLED", "k"));
+        contractFault(() -> pay.record("pay-1", "SETTLED", "OTHER", "k"));
         SIM.answerRaw("notify", 201, "{}", 1);
         contractFault(() -> ntf.notify("pay-1", "PAYMENT_SETTLED", "k"));
+    }
+
+    @Test
+    void aDecisionNobodyCouldConfirmNeverComesBackAsAMoneyMove() {
+        for (String outcome : List.of("SETTLE", "RELEASE")) {
+            SIM.answerRaw("record-exception-decision", 200, "{\"outcome\":\"" + outcome + "\"}", 2);
+            contractFault(() -> pay.record("pay-1", "UNRESOLVED", "OTHER", "k"));
+            contractFault(() -> pay.record("pay-1", "EXPIRED", "SLA_EXPIRED", "k"));
+        }
+        SIM.answerRaw("record-exception-decision", 200, "{\"outcome\":\"HANDED_BACK\"}", 1);
+        assertThat(pay.record("pay-1", "UNRESOLVED", "OTHER", "k")).isEqualTo(PaymentExceptionPort.Outcome.HANDED_BACK);
+    }
+
+    @Test
+    void aReasonThatIsNotItsDecisionsCodeIsRefusedBeforeTheCall() {
+        contractFault(() -> pay.record("pay-1", "SETTLED", "customer called", "k"));
+        contractFault(() -> pay.record("pay-1", "SETTLED", null, "k"));
+        contractFault(() -> pay.record("pay-1", "SETTLED", "SLA_EXPIRED", "k"));
+        contractFault(() -> pay.record("pay-1", "EXPIRED", "OTHER", "k"));
+        assertThat(SIM.calls()).isEmpty();
     }
 
     @Test
     void enumInputsOutsideTheirCodesAreRefusedBeforeTheCall() {
         contractFault(() -> psg.statusOf("AANI", "pay-1"));
         contractFault(() -> psg.statusOf(null, "pay-1"));
-        contractFault(() -> pay.record("pay-1", "ESCALATE", "k"));
-        contractFault(() -> pay.record("pay-1", null, "k"));
+        contractFault(() -> pay.record("pay-1", "ESCALATE", "OTHER", "k"));
+        contractFault(() -> pay.record("pay-1", null, "OTHER", "k"));
         contractFault(() -> ntf.notify("pay-1", "ACCOUNT_OPENED", "k"));
         assertThat(SIM.calls()).isEmpty();
     }
 
     @Test
     void requestsCarryTheFieldsTheirExpectationNames() {
-        pay.record("pay-1", "REJECTED", "pay-1:record-exception-decision");
+        pay.record("pay-1", "REJECTED", "OTHER", "pay-1:record-exception-decision");
         pay.markSettled("pay-2", "jr-7", "pay-2:mark-settled");
         ntf.notify("pay-3", "PAYMENT_REJECTED", "pay-3:notify-payment-rejected");
 
-        assertThat(SIM.callsTo("/api/v1/payments/pay-1/exception/decision").get(0).body()).containsEntry("decision", "REJECTED");
+        assertThat(SIM.callsTo("/api/v1/payments/pay-1/exception/decision").get(0).body())
+            .containsOnly(entry("decision", "REJECTED"), entry("reason", "OTHER"));
         assertThat(SIM.callsTo("/api/v1/payments/pay-2/exception/settle").get(0).body()).containsEntry("journalRef", "jr-7");
         assertThat(SIM.callsTo("/api/v1/notifications").get(0).body()).containsEntry("subjectRef", "pay-3")
             .containsEntry("purpose", "PAYMENT_REJECTED").doesNotContainKey("paymentId");

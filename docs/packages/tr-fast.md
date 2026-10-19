@@ -56,6 +56,11 @@ repositories this programme can reach; creating it is the repository owner's ste
    UNRESOLVED; nobody deciding in time is EXPIRED. `pay` answers both with HANDED_BACK: no money moves, the hold
    stays and the payment leaves bpo's ownership. Who decided UNRESOLVED stays in the engine's user-task record;
    passing the deciding person to `pay` waits for `bpo-process-api`.
+   Every decision carries a coded reason in `decisionReason`, and `pay` receives exactly `{decision, reason}`.
+   People pick OTHER, the only code until `pay` supplies its own; the SLA expiry sets SLA_EXPIRED, which no
+   form offers. The worker refuses free text, a missing reason, SLA_EXPIRED from a person and any other reason
+   on an expiry before it calls `pay`. It also refuses an answer of SETTLE or RELEASE to UNRESOLVED or EXPIRED,
+   so an unconfirmed decision raises an incident instead of moving money, whatever `pay` answers.
 6. A hold that already lapsed (410 `HOLD_EXPIRED`), an unknown status, a crafted id or a rail without a
    gateway stops the instance on an incident. Nothing is guessed.
 
@@ -155,6 +160,9 @@ None of these blocks merging the models; each blocks deploying `bpo-worker-payme
 - **G-P5 The credit on RETURNED rests on `pay`'s match.** `pay.apply-return` credits the customer; the check that
   the return belongs to the payment and does not exceed it is `pay`'s (`applyFastReturn`, `requested`). The
   simulator credits every return. The worker is not deployed against a real `pay` before that rule exists.
+- **G-P6 The reason codes are placeholders.** OTHER is the only human code until `cmp` and `pay` supply theirs
+  (`recordReviewDecision` and `recordExceptionDecision`, both `requested`). Their codes replace OTHER in the
+  forms, in `variables.yaml` and in the workers before the worker serves real queues.
 - **G-P4** Governance records the design documents and the TCMB and BKM statements this file relies on.
 
 ## Values that are assumptions

@@ -175,12 +175,13 @@ class PayInstantExceptionTest {
         assertThat(UserTaskSelectors.byElementId("Task_OpsReview")).hasCandidateGroups(List.of("pay-tr-fast-ops"));
         assertThat(inquiries("pay-ops-1")).isEqualTo(4);
         assertThat(SIM.holdsCaptured()).isZero();
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "SETTLED"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "SETTLED", "decisionReason", "OTHER"));
 
         assertThat(instance).isCompleted()
             .hasCompletedElements("BoundaryEvent_StatusTimeout", "Task_RecordExceptionDecision", "Task_CaptureHold", "EndEvent_Settled")
             .hasVariable("exceptionOutcome", "SETTLE");
         assertThat(SIM.exceptionDecisionRecordedFor("pay-ops-1")).isEqualTo("SETTLED");
+        assertThat(SIM.exceptionReasonRecordedFor("pay-ops-1")).isEqualTo("OTHER");
         assertThat(SIM.holdsCaptured()).isEqualTo(1);
     }
 
@@ -191,7 +192,7 @@ class PayInstantExceptionTest {
         ProcessInstanceEvent instance = start("pay-ops-2");
         letEveryWaitPass();
         assertThat(instance).isActive().hasActiveElements("Task_OpsReview");
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "REJECTED"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "REJECTED", "decisionReason", "OTHER"));
 
         assertThat(instance).isCompleted().hasCompletedElements("Task_ReleaseHold", "Task_MarkRejected", "EndEvent_Rejected")
             .hasNotActivatedElements("Task_CaptureHold");
@@ -206,7 +207,7 @@ class PayInstantExceptionTest {
         letEveryWaitPass();
         assertThat(instance).isActive().hasActiveElements("Task_OpsReview");
         context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"),
-            Map.of("exceptionDecision", "SETTLED", "paymentId", "pay-other-1", "jurisdiction", "AE", "rail", "AANI"));
+            Map.of("exceptionDecision", "SETTLED", "decisionReason", "OTHER", "paymentId", "pay-other-1", "jurisdiction", "AE", "rail", "AANI"));
 
         assertThat(instance).isCompleted().hasCompletedElements("Task_CaptureHold", "EndEvent_Settled")
             .hasVariable("paymentId", "pay-ops-5").hasVariable("jurisdiction", "TR").hasVariable("rail", "FAST");
@@ -222,10 +223,10 @@ class PayInstantExceptionTest {
         ProcessInstanceEvent instance = start("pay-ops-3");
         letEveryWaitPass();
         assertThat(instance).isActive().hasActiveElements("Task_OpsReview");
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "ESCALATE"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "ESCALATE", "decisionReason", "OTHER"));
         assertThat(instance).isActive().hasActiveElements("Task_SupervisorReview");
         assertThat(UserTaskSelectors.byElementId("Task_SupervisorReview")).hasCandidateGroups(List.of("pay-tr-fast-supervisor"));
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_SupervisorReview"), Map.of("exceptionDecision", "SETTLED"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_SupervisorReview"), Map.of("exceptionDecision", "SETTLED", "decisionReason", "OTHER"));
 
         assertThat(instance).isCompleted().hasCompletedElements("Task_SupervisorReview", "Task_CaptureHold", "EndEvent_Settled");
         assertThat(SIM.exceptionDecisionRecordedFor("pay-ops-3")).isEqualTo("SETTLED");
@@ -238,9 +239,9 @@ class PayInstantExceptionTest {
         ProcessInstanceEvent instance = start("pay-ops-6");
         letEveryWaitPass();
         assertThat(instance).isActive().hasActiveElements("Task_OpsReview");
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "ESCALATE"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"), Map.of("exceptionDecision", "ESCALATE", "decisionReason", "OTHER"));
         assertThat(instance).isActive().hasActiveElements("Task_SupervisorReview");
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_SupervisorReview"), Map.of("exceptionDecision", "UNRESOLVED"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_SupervisorReview"), Map.of("exceptionDecision", "UNRESOLVED", "decisionReason", "OTHER"));
 
         assertThat(instance).isCompleted()
             .hasCompletedElements("Task_SupervisorReview", "Task_RecordExceptionDecision", "EndEvent_HandedBack")
@@ -267,6 +268,7 @@ class PayInstantExceptionTest {
             .hasCompletedElements("BoundaryEvent_OpsSla", "BoundaryEvent_SupervisorSla", "Event_DecisionExpired", "EndEvent_HandedBack")
             .hasNotActivatedElements("Task_CaptureHold", "Task_ReleaseHold").hasVariable("exceptionOutcome", "HANDED_BACK");
         assertThat(SIM.exceptionDecisionRecordedFor("pay-ops-4")).isEqualTo("EXPIRED");
+        assertThat(SIM.exceptionReasonRecordedFor("pay-ops-4")).isEqualTo("SLA_EXPIRED");
         assertThat(SIM.holdsCaptured()).isZero();
         assertThat(SIM.holdsReleased("pay-ops-4")).isZero();
         assertThat(notifications("PAYMENT_SETTLED") + notifications("PAYMENT_REJECTED")).isZero();
@@ -294,6 +296,28 @@ class PayInstantExceptionTest {
         assertThat(instance).isActive().hasActiveIncidents().hasActiveElements("Task_CaptureHold")
             .hasNotActivatedElements("Task_MarkSettled", "Task_NotifySettled");
         assertThat(notifications("PAYMENT_SETTLED")).isZero();
+    }
+
+    @Test
+    void aFreeTextReasonStopsOnAnIncidentAndNoMoneyMoves() {
+        decideWithReason("pay-reason-1", "customer called twice");
+    }
+
+    @Test
+    void aPersonWhoClaimsTheExpiryReasonStopsOnAnIncidentAndNoMoneyMoves() {
+        decideWithReason("pay-reason-2", "SLA_EXPIRED");
+    }
+
+    private void decideWithReason(String paymentId, String reason) {
+        SIM.schemeStatuses(paymentId, "PDNG");
+        ProcessInstanceEvent instance = start(paymentId);
+        letEveryWaitPass();
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_OpsReview"),
+            Map.of("exceptionDecision", "SETTLED", "decisionReason", reason));
+
+        assertThat(instance).isActive().hasActiveIncidents().hasNotActivatedElements("Task_CaptureHold", "Task_ReleaseHold");
+        assertThat(SIM.exceptionDecisionRecordedFor(paymentId)).isNull();
+        assertThat(SIM.holdsCaptured()).isZero();
     }
 
     @Test

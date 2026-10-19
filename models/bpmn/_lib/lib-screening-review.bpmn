@@ -41,6 +41,7 @@
         <zeebe:formDefinition formId="cmp-review-analyst-decision" bindingType="deployment" />
         <zeebe:ioMapping>
           <zeebe:output source="=reviewDecision" target="reviewDecision" />
+          <zeebe:output source="=decisionReason" target="decisionReason" />
         </zeebe:ioMapping>
         <zeebe:assignmentDefinition candidateGroups="=[routing.reviewQueue]" />
         <zeebe:taskSchedule dueDate="=now() + duration(routing.reviewSla)" />
@@ -70,6 +71,7 @@
         <zeebe:formDefinition formId="cmp-review-senior-decision" bindingType="deployment" />
         <zeebe:ioMapping>
           <zeebe:output source="=reviewDecision" target="reviewDecision" />
+          <zeebe:output source="=decisionReason" target="decisionReason" />
         </zeebe:ioMapping>
         <zeebe:assignmentDefinition candidateGroups="=[routing.escalationQueue]" />
         <zeebe:taskSchedule dueDate="=now() + duration(routing.escalationSla)" />
@@ -88,6 +90,7 @@
         <zeebe:ioMapping>
           <!-- Fail closed (C8-K9): an onboarding review nobody decided is posted to cmp as expired. -->
           <zeebe:output source="=&#34;EXPIRED&#34;" target="reviewDecision" />
+          <zeebe:output source="=&#34;SLA_EXPIRED&#34;" target="decisionReason" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_ToReviewExpired</bpmn:incoming>
