@@ -9,3 +9,19 @@ operations:
     idempotencyKey: "<applicationId>:alias-offer"
     request: {applicationId: id, accountId: id}
     response: {status: [OFFERED, NOT_ELIGIBLE]}
+  getFastInstructionStatus:
+    status: requested
+    method: GET
+    path: /api/v1/psg-tr/fast/instructions/{paymentId}/status
+    caller: svc-bpo-worker-payments
+    response: {schemeStatus: [ACSC, RJCT, PDNG]}
+    readOnly: true     # never resends the instruction to FAST (05 §6.4, 08 §11.1 "no resend without a status inquiry")
+    personalData: none # no IBAN, alias or name; the gateway keeps the canonical instruction
+events:
+  SchemeStatusReported:
+    status: requested
+    topic: evt.psg.tr.v1
+    eventType: PaymentSchemes.Instruction.StatusReported.v1
+    key: paymentId
+    fields: {paymentId: id}
+    note: Only wakes the instance (lib-await-external-status re-reads getFastInstructionStatus); the bridge publishes Msg_SchemeStatusReported with correlation key paymentId.

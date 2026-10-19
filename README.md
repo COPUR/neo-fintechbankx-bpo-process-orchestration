@@ -25,7 +25,7 @@ repos to keep `io.camunda` out (`docs/proposals/archunit-no-camunda.md`).
 | `models/dictionary/` | Allow-lists the lint and the workers share: variables, job types, messages, errors. |
 | `lint/` | bpmnlint (recommended + camunda-compat `camunda-cloud-8-10`) and the repo's `fbx` rules, with tests. |
 | `services/bpo-worker-kit` | Idempotency keys, provider HTTP with status mapping, output variable filter, job error mapping. |
-| `services/bpo-worker-<family>` | One worker module per family. `onboarding` is live; the others have a README until their first model. |
+| `services/bpo-worker-<family>` | One worker module per family. `onboarding` and `payments` carry code; the others have a README until their first model. |
 | `services/bpo-process-api`, `services/bpo-event-bridge` | Planned: start/query/human task API, and the Kafka inbox/outbox bridge (ADR-019). |
 | `simulators/domain-simulator` | In-process HTTP stand-in for every provider operation the workers call. |
 | `tests/cpt` | Camunda Process Tests of every model against the real engine (Testcontainers) and the simulator. |
@@ -34,7 +34,7 @@ repos to keep `io.camunda` out (`docs/proposals/archunit-no-camunda.md`).
 | `deploy/camunda-platform` | Chart lock (camunda-platform 15.x) and values per environment. |
 | `deploy/helm` | The bpo services' own chart, added with the first deployable service. |
 | `programmes/{pot,poc,pov}` | Proof of technology, concept and value: scope, criteria and evidence per round. |
-| `docs/` | Local ADRs, runbooks, identity requests and proposals. |
+| `docs/` | Local ADRs, runbooks, identity requests, proposals and the jurisdiction packages (`docs/packages/`). |
 
 ## First process: P1 TPP account opening
 
@@ -44,6 +44,15 @@ applicant, sends a REVIEW result to `lib-screening-review` (routed by `cmp-revie
 analyst task, an escalation task and SLA timers), opens the account exactly once (`acc.open-account`
 is the pivot; a lost response is retried with the same idempotency key), offers a Kolay Adres alias
 in Türkiye, and notifies the applicant. Every rejection path closes the application and notifies.
+
+## Second process: P2 instant payment exception (TR FAST package)
+
+`pay-instant-exception` takes over an instant payment whose scheme answer did not come back: `pay` hands it over
+in `EXCEPTION_OWNED_BY_BPO`, and the instance reads the scheme status through `lib-await-external-status` (read
+only, the gateway's event or a growing timer, four reads at most), captures the hold exactly once on ACSC
+(`acc.capture-hold` is the pivot), releases it on RJCT, and sends a status that stays unknown to payments
+operations, whose decision `pay` checks and answers. FAST's happy path stays in `pay` and the rail gateway.
+`docs/packages/tr-fast.md` maps every TR FAST process to its model or to the service that keeps it.
 
 ## Running locally
 

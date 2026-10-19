@@ -1,0 +1,40 @@
+provider: pay
+service: fintechbankx-lendingpayments-payment-orchestration-initiation-settlement
+audience: svc-pay-initiation-settlement   # docs/identity-requests.md; mesh mTLS + aud/azp per docs/adr/0002
+# P2 needs pay to hand a payment over: on a scheme timeout or an unknown answer pay sets the payment to
+# EXCEPTION_OWNED_BY_BPO, emits Payment.ExceptionRaised and stops acting on late scheme answers (05 §6.4, §8 "tek sahip").
+operations:
+  recordExceptionDecision:
+    status: requested
+    method: POST
+    path: /api/v1/payments/{paymentId}/exception/decision
+    idempotencyKey: "<paymentId>:record-exception-decision"
+    caller: svc-bpo-worker-payments
+    request: {decision: [SETTLED, REJECTED, EXPIRED]}
+    response: {outcome: [SETTLE, RELEASE, HANDED_BACK]}
+    rule: pay checks the decision against the gateway's record and answers HANDED_BACK when they disagree or the decision is EXPIRED; HANDED_BACK leaves EXCEPTION_OWNED_BY_BPO and the hold untouched
+    goLive: P2 captures the hold on SETTLE and trusts this answer; until pay implements and publishes this rule, a human SETTLED decision alone would move money, so the payments worker is not deployed against a real pay URL before then (docs/packages/tr-fast.md, go-live conditions).
+  markExceptionSettled:
+    status: requested
+    method: POST
+    path: /api/v1/payments/{paymentId}/exception/settle
+    idempotencyKey: "<paymentId>:mark-settled"
+    caller: svc-bpo-worker-payments
+    request: {journalRef: id}
+    response: {}
+  markExceptionRejected:
+    status: requested
+    method: POST
+    path: /api/v1/payments/{paymentId}/exception/reject
+    idempotencyKey: "<paymentId>:mark-rejected"
+    caller: svc-bpo-worker-payments
+    request: {}
+    response: {}
+events:
+  ExceptionRaised:
+    status: requested
+    topic: evt.pay.payment.v1
+    eventType: Payment.ExceptionRaised.v1
+    key: paymentId
+    fields: {paymentId: id, jurisdiction: [AE, TR], rail: [FAST]}
+    note: The event bridge starts pay-instant-exception from it (start registry, 05 §8); no amount or party detail.

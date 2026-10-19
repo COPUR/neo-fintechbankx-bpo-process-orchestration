@@ -1,0 +1,51 @@
+# Deny everything in the namespace, then allow only the demo pods to reach Camunda. Port-forward from the
+# presenter's machine goes through the API server and is not affected.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: bpo-demo-tr
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: camunda-from-demo-pods
+  namespace: bpo-demo-tr
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: camunda}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/part-of: bpo-demo}
+      ports:
+        - {port: 8080}
+        - {port: 26500}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: demo-pods-to-camunda-and-dns
+  namespace: bpo-demo-tr
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/part-of: bpo-demo}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: camunda}
+      ports:
+        - {port: 8080}
+        - {port: 26500}
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}

@@ -1,0 +1,83 @@
+# One Camunda 8.10.4 pod (broker, REST/gRPC gateway, Operate, Tasklist, Identity) with in-memory H2 secondary
+# storage, the arrangement the process tests use. The pinned chart (deploy/camunda-platform) is the target for
+# dev and prod; this single pod is what fits a laptop. Basic auth with one presenter user whose password up.sh
+# generates into the Secret camunda-presenter; the API refuses unauthenticated calls.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: camunda
+  namespace: bpo-demo-tr
+  labels: {app.kubernetes.io/name: camunda, app.kubernetes.io/part-of: bpo-demo}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: camunda}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: camunda, app.kubernetes.io/part-of: bpo-demo}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: camunda
+          image: camunda/camunda:8.10.4@sha256:e71bed9297381fe3449ebe2c022264ca62f5a87e95fe3aece42c6f4e1069d139
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: grpc, containerPort: 26500}
+            - {name: management, containerPort: 9600}
+          env:
+            - {name: SPRING_PROFILES_ACTIVE, value: "broker,consolidated-auth,operate,tasklist,identity"}
+            - {name: CAMUNDA_DATA_SECONDARYSTORAGE_TYPE, value: rdbms}
+            - {name: CAMUNDA_DATA_SECONDARYSTORAGE_RDBMS_URL, value: "jdbc:h2:mem:demo;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"}
+            - {name: CAMUNDA_DATA_SECONDARYSTORAGE_RDBMS_USERNAME, value: sa}
+            - {name: CAMUNDA_DATA_SECONDARYSTORAGE_RDBMS_FLUSHINTERVAL, value: PT0.5S}
+            - {name: CAMUNDA_SECURITY_AUTHENTICATION_METHOD, value: basic}
+            - {name: CAMUNDA_SECURITY_AUTHENTICATION_UNPROTECTEDAPI, value: "false"}
+            - {name: CAMUNDA_SECURITY_AUTHORIZATIONS_ENABLED, value: "true"}
+            - {name: CAMUNDA_SECURITY_INITIALIZATION_USERS_0_USERNAME, value: presenter}
+            - name: CAMUNDA_SECURITY_INITIALIZATION_USERS_0_PASSWORD
+              valueFrom: {secretKeyRef: {name: camunda-presenter, key: credential}}
+            - {name: CAMUNDA_SECURITY_INITIALIZATION_USERS_0_NAME, value: Presenter}
+            - {name: CAMUNDA_SECURITY_INITIALIZATION_USERS_0_EMAIL, value: presenter@example.invalid}
+            - {name: CAMUNDA_SECURITY_INITIALIZATION_DEFAULTROLES_ADMIN_USERS_0, value: presenter}
+            - {name: JAVA_TOOL_OPTIONS, value: "-XX:MaxRAMPercentage=70"}
+          resources:
+            requests: {cpu: "1", memory: 3Gi}
+            limits: {memory: 3Gi}
+          startupProbe:
+            httpGet: {path: /actuator/health/readiness, port: management}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: management}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: management}
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /usr/local/camunda/data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: data, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: camunda
+  namespace: bpo-demo-tr
+  labels: {app.kubernetes.io/name: camunda, app.kubernetes.io/part-of: bpo-demo}
+spec:
+  selector: {app.kubernetes.io/name: camunda}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+    - {name: grpc, port: 26500, targetPort: grpc}

@@ -19,8 +19,8 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Stands in for cus, cmp, acc, psg-tr and ntf while their onboarding operations are requested but not yet
- * in the catalog (contracts/expectations/*.yaml lists what the workers need). It keeps the behaviour that
+ * Stands in for cus, cmp, acc, psg-tr, pay and ntf while the operations the onboarding and payments workers
+ * call are requested but not yet in the catalog (contracts/expectations/*.yaml lists what the workers need). It keeps the behaviour that
  * matters to the process: a replayed idempotency key returns the first answer, a key reused with another
  * body is refused, a response can be lost after the effect happened, and a request without the fields its
  * expectation names is refused with 400, so a worker that drifts from the contract fails here too.
@@ -34,6 +34,12 @@ public final class DomainSimulator implements AutoCloseable {
     private static final Pattern OPEN = Pattern.compile("/api/v1/account-applications/([^/]+)/open");
     private static final Pattern REJECT = Pattern.compile("/api/v1/account-applications/([^/]+)/reject");
     private static final Pattern DECISION = Pattern.compile("/api/v1/compliance/review-cases/([^/]+)/decision");
+    private static final Pattern SCHEME_STATUS = Pattern.compile("/api/v1/psg-tr/fast/instructions/([^/]+)/status");
+    private static final Pattern CAPTURE = Pattern.compile("/api/v1/holds/([^/]+)/capture");
+    private static final Pattern RELEASE = Pattern.compile("/api/v1/holds/([^/]+)/release");
+    private static final Pattern EXCEPTION_DECISION = Pattern.compile("/api/v1/payments/([^/]+)/exception/decision");
+    private static final Pattern MARK_SETTLED = Pattern.compile("/api/v1/payments/([^/]+)/exception/settle");
+    private static final Pattern MARK_REJECTED = Pattern.compile("/api/v1/payments/([^/]+)/exception/reject");
 
     private final HttpServer server;
     private final JsonMapper json = JsonMapper.builder().build();
@@ -54,6 +60,11 @@ public final class DomainSimulator implements AutoCloseable {
     private final Map<String, Map<String, Object>> openBodyByKey = new HashMap<>();
     private final Map<String, String> applicationByCase = new HashMap<>();
     private final Map<String, String> decisionByCase = new HashMap<>();
+    private final Map<String, List<String>> schemeStatusesByPayment = new HashMap<>();
+    private final Map<String, Map<String, Object>> capturedByKey = new LinkedHashMap<>();
+    private final Map<String, Map<String, Object>> captureBodyByKey = new HashMap<>();
+    private final Map<String, Integer> releasesByPayment = new HashMap<>();
+    private final Map<String, String> exceptionDecisionByPayment = new HashMap<>();
     private int sequence;
 
     private DomainSimulator(HttpServer server) {
@@ -92,6 +103,15 @@ public final class DomainSimulator implements AutoCloseable {
     /** PASS, REVIEW or FAIL: the decision values of the catalog's ComplianceScreeningResponse. */
     public synchronized DomainSimulator screening(String applicationId, String decision) {
         screeningByApplication.put(applicationId, decision);
+        return this;
+    }
+
+    /**
+     * The scheme statuses psg-tr answers for the payment, one per inquiry in order; the last one is repeated.
+     * A payment without a scenario is ACSC.
+     */
+    public synchronized DomainSimulator schemeStatuses(String paymentId, String... statuses) {
+        schemeStatusesByPayment.put(paymentId, new ArrayList<>(List.of(statuses)));
         return this;
     }
 
@@ -141,6 +161,11 @@ public final class DomainSimulator implements AutoCloseable {
         openBodyByKey.clear();
         applicationByCase.clear();
         decisionByCase.clear();
+        schemeStatusesByPayment.clear();
+        capturedByKey.clear();
+        captureBodyByKey.clear();
+        releasesByPayment.clear();
+        exceptionDecisionByPayment.clear();
     }
 
     // ---- observations -------------------------------------------------------------------------------
@@ -156,6 +181,19 @@ public final class DomainSimulator implements AutoCloseable {
     /** Accounts created by open-account, one per distinct idempotency key. */
     public synchronized int accountsOpened() {
         return openedByKey.size();
+    }
+
+    /** Holds captured by capture-hold, one per distinct idempotency key. */
+    public synchronized int holdsCaptured() {
+        return capturedByKey.size();
+    }
+
+    public synchronized int holdsReleased(String paymentId) {
+        return releasesByPayment.getOrDefault(paymentId, 0);
+    }
+
+    public synchronized String exceptionDecisionRecordedFor(String paymentId) {
+        return exceptionDecisionByPayment.get(paymentId);
     }
 
     public synchronized String decisionRecordedFor(String applicationId) {
@@ -244,13 +282,20 @@ public final class DomainSimulator implements AutoCloseable {
         if (method.equals("POST") && path.equals("/api/v1/psg-tr/alias-offers")) return "alias-offer";
         if (method.equals("POST") && path.equals("/api/v1/notifications")) return "notify";
         if (method.equals("POST") && path.equals("/token")) return "token";
+        if (method.equals("GET") && SCHEME_STATUS.matcher(path).matches()) return "scheme-status";
+        if (method.equals("POST") && CAPTURE.matcher(path).matches()) return "capture-hold";
+        if (method.equals("POST") && RELEASE.matcher(path).matches()) return "release-hold";
+        if (method.equals("POST") && EXCEPTION_DECISION.matcher(path).matches()) return "record-exception-decision";
+        if (method.equals("POST") && MARK_SETTLED.matcher(path).matches()) return "mark-settled";
+        if (method.equals("POST") && MARK_REJECTED.matcher(path).matches()) return "mark-rejected";
         return null;
     }
 
     private static final List<String> JURISDICTIONS = List.of("AE", "TR");
     private static final List<String> REVIEW_DECISIONS = List.of("CLEAR", "REJECT", "EXPIRED");
     private static final List<String> REJECTION_REASONS = List.of("KYC_REJECTED", "KYC_TIMEOUT", "SCREENING_REJECTED");
-    private static final List<String> PURPOSES = List.of("ACCOUNT_OPENED", "ACCOUNT_APPLICATION_REJECTED");
+    private static final List<String> PURPOSES = List.of("ACCOUNT_OPENED", "ACCOUNT_APPLICATION_REJECTED", "PAYMENT_SETTLED", "PAYMENT_REJECTED");
+    private static final List<String> EXCEPTION_DECISIONS = List.of("SETTLED", "REJECTED", "EXPIRED");
 
     /** The request fields contracts/expectations names for each operation; the first one missing or out of range. */
     private static String missingField(String operation, Map<String, Object> body) {
@@ -262,6 +307,8 @@ public final class DomainSimulator implements AutoCloseable {
             case "record-review-decision" -> REVIEW_DECISIONS.contains(body.get("decision")) ? null : "decision";
             case "reject-application" -> REJECTION_REASONS.contains(body.get("rejectionReason")) ? null : "rejectionReason";
             case "alias-offer" -> firstMissing(body, "applicationId", "accountId");
+            case "record-exception-decision" -> EXCEPTION_DECISIONS.contains(body.get("decision")) ? null : "decision";
+            case "mark-settled" -> firstMissing(body, "journalRef");
             case "notify" -> firstMissing(body, "subjectRef") != null ? "subjectRef"
                 : PURPOSES.contains(body.get("purpose")) ? null : "purpose";
             default -> null;
@@ -329,6 +376,54 @@ public final class DomainSimulator implements AutoCloseable {
                 openBodyByKey.put(key, normalized);
                 return new Reply(201, account);
             }
+            case "scheme-status": {
+                Matcher m = SCHEME_STATUS.matcher(path);
+                m.matches();
+                List<String> statuses = schemeStatusesByPayment.get(m.group(1));
+                String status = statuses == null ? "ACSC" : statuses.size() > 1 ? statuses.remove(0) : statuses.get(0);
+                return new Reply(200, Map.of("schemeStatus", status));
+            }
+            case "capture-hold": {
+                if (key == null) {
+                    return error(400, "IDEMPOTENCY_KEY_REQUIRED");
+                }
+                Matcher m = CAPTURE.matcher(path);
+                m.matches();
+                Map<String, Object> normalized = Map.of("paymentId", m.group(1), "body", body);
+                if (capturedByKey.containsKey(key)) {
+                    if (!captureBodyByKey.get(key).equals(normalized)) {
+                        return error(409, "IDEMPOTENCY_KEY_REUSED");
+                    }
+                    return new Reply(200, capturedByKey.get(key));
+                }
+                Map<String, Object> entry = Map.of("journalRef", "jr-" + (capturedByKey.size() + 1));
+                capturedByKey.put(key, entry);
+                captureBodyByKey.put(key, normalized);
+                return new Reply(201, entry);
+            }
+            case "release-hold": {
+                Matcher m = RELEASE.matcher(path);
+                m.matches();
+                releasesByPayment.merge(m.group(1), 1, Integer::sum);
+                return new Reply(200, Map.of());
+            }
+            case "record-exception-decision": {
+                Matcher m = EXCEPTION_DECISION.matcher(path);
+                m.matches();
+                String decision = String.valueOf(body.get("decision"));
+                exceptionDecisionByPayment.put(m.group(1), decision);
+                // A test stand-in, not pay's contract: it maps the decision without the check against the gateway's
+                // record that pay must make (contracts/expectations/pay.yaml recordExceptionDecision, still requested).
+                String outcome = switch (decision) {
+                    case "SETTLED" -> "SETTLE";
+                    case "REJECTED" -> "RELEASE";
+                    default -> "HANDED_BACK";
+                };
+                return new Reply(200, Map.of("outcome", outcome));
+            }
+            case "mark-settled":
+            case "mark-rejected":
+                return new Reply(204, Map.of(), "");
             case "token":
                 tokensIssued++;
                 return new Reply(200, Map.of("access_token", "token-" + tokensIssued, "expires_in", tokenExpiresIn));

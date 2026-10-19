@@ -11,3 +11,12 @@ job-types:
   acc.reject-application: {family: onboarding, provider: acc, operation: rejectAccountApplication, contract: requested, outputs: []}
   psg-tr.alias-offer: {family: onboarding, provider: psg-tr, operation: offerKolayAdresAlias, contract: requested, outputs: [aliasOfferStatus]}
   ntf.notify: {family: onboarding, provider: ntf, operation: sendNotification, contract: requested, outputs: [notificationRef]}
+# Payments family (P2 pay-instant-exception, TR FAST profile). psg.status-inquiry is read-only and rail-neutral: the
+# worker serves rail FAST through psg-tr; psg-ae joins with its own expectation when that gateway exists.
+  psg.status-inquiry: {family: payments, provider: psg-tr, operation: getFastInstructionStatus, contract: requested, outputs: [schemeStatus]}
+  acc.capture-hold: {family: payments, provider: acc, operation: captureHold, contract: requested, outputs: [journalRef], pivot: true}
+  acc.release-hold: {family: payments, provider: acc, operation: releaseHold, contract: requested, outputs: []}
+  pay.record-exception-decision: {family: payments, provider: pay, operation: recordExceptionDecision, contract: requested, outputs: [exceptionOutcome]}
+  pay.mark-settled: {family: payments, provider: pay, operation: markExceptionSettled, contract: requested, outputs: []}
+  pay.mark-rejected: {family: payments, provider: pay, operation: markExceptionRejected, contract: requested, outputs: []}
+  ntf.notify-payment: {family: payments, provider: ntf, operation: sendNotification, contract: requested, outputs: [notificationRef]}

@@ -82,7 +82,10 @@ test('user-task: job-worker user task, no candidate group, candidate users', asy
   assert.ok(messages.some((m) => /not a Camunda user task/.test(m)), messages.join());
   assert.ok(messages.some((m) => /no candidate group/.test(m)), messages.join());
   assert.ok(messages.some((m) => /candidate users/.test(m)), messages.join());
-  assert.deepStrictEqual(await fbx(model(userTask('<zeebe:userTask /><zeebe:assignmentDefinition candidateGroups="cmp-review-l1" />')), 'user-task'), []);
+  const mapped = '<zeebe:ioMapping><zeebe:output source="=decision" target="decision" /></zeebe:ioMapping>';
+  const unmapped = await fbx(model(userTask('<zeebe:userTask /><zeebe:assignmentDefinition candidateGroups="cmp-review-l1" />')), 'user-task');
+  assert.ok(unmapped.some((m) => /no output mapping/.test(m)), unmapped.join());
+  assert.deepStrictEqual(await fbx(model(userTask(`<zeebe:userTask />${mapped}<zeebe:assignmentDefinition candidateGroups="cmp-review-l1" />`)), 'user-task'), []);
 });
 
 test('bounded-wait: a user task without a timer and a bare message wait', async () => {
