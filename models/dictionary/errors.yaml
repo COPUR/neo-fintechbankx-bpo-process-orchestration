@@ -1,4 +1,5 @@
 # BPMN errors (07 O3): business outcomes a model catches. Anything not listed here is an incident.
 errors:
   Err_ScreeningRejected: {thrownBy: lib-screening-review, caughtBy: [acc-tpp-account-opening]}
+  Err_ReturnNotMatched: {thrownBy: pay.apply-return, caughtBy: [pay-return-recall], note: pay could not match the reported return to the original payment}
   Err_StatusTimeout: {thrownBy: lib-await-external-status, caughtBy: [pay-instant-exception]}

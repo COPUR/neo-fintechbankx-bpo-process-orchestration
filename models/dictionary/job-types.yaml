@@ -19,4 +19,8 @@ job-types:
   pay.record-exception-decision: {family: payments, provider: pay, operation: recordExceptionDecision, contract: requested, outputs: [exceptionOutcome]}
   pay.mark-settled: {family: payments, provider: pay, operation: markExceptionSettled, contract: requested, outputs: []}
   pay.mark-rejected: {family: payments, provider: pay, operation: markExceptionRejected, contract: requested, outputs: []}
+  psg.send-recall-request: {family: payments, provider: psg-tr, operation: sendFastRecallRequest, contract: requested, outputs: [recallRequestRef]}
+  psg.recall-status: {family: payments, provider: psg-tr, operation: getFastRecallStatus, contract: requested, outputs: [recallStatus]}
+  pay.apply-return: {family: payments, provider: pay, operation: applyFastReturn, contract: requested, outputs: [journalRef], pivot: true}
+  pay.close-recall: {family: payments, provider: pay, operation: closeRecallCase, contract: requested, outputs: []}
   ntf.notify-payment: {family: payments, provider: ntf, operation: sendNotification, contract: requested, outputs: [notificationRef]}

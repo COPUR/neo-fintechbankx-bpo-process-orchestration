@@ -22,8 +22,8 @@ human parts.
 | TR process (08 §10.1) | Execution | Model in this repo | State |
 |---|---|---|---|
 | TR-02 outgoing FAST, TR-03 incoming FAST | Synchronous, `pay` + `psg-tr` + `acc` | none | not bpo |
-| TR-04 FAST timeout and unknown status | BPMN | `pay-instant-exception` (P2) with `lib-await-external-status` (L3) | **this round** |
-| TR-05 FAST return, recall, misdirected credit | BPMN | `pay-return-recall` (P6, TR profile) | next |
+| TR-04 FAST timeout and unknown status | BPMN | `pay-instant-exception` (P2) with `lib-await-external-status` (L3) | built (round 1) |
+| TR-05 FAST return, recall, misdirected credit | BPMN | `pay-return-recall` (P6, TR profile), sending side | **this round** |
 | TR-16, TR-17 Ödeme İste (request to pay) | BPMN | `rtp-lifecycle` (P7, TR profile) | planned |
 | TR-19 Güvenli Ödeme operator (escrow hold, release, refund) | BPMN | `pay-safe-payment-escrow` (P8) | planned |
 | TR-21 SİPER fraud case | BPMN | `tr-siper-fraud-case` (new; number from Governance) | planned |
@@ -63,6 +63,33 @@ The instance holds `paymentId`, `jurisdiction`, `rail`, `schemeStatus`, `journal
 routing and decision enums. No amount, IBAN, alias, name or ISO 20022 body enters Camunda (05 §5.1); the CPT
 suite checks the variable list and the size.
 
+## P6 `pay-return-recall` (TR-05, sending side)
+
+The customer says a FAST payment went to the wrong place and asks for it back. This round covers the sending
+bank; the receiving bank's side (find the credit, ask the recipient, send the return) comes with the SİPER case.
+
+1. `pay` opens its recall case and emits `Payment.RecallRequested.v1` (requested in `contracts/expectations/pay.yaml`).
+   The event bridge starts one instance per `paymentId` with `jurisdiction` and `rail`.
+2. `psg-tr` sends the recall request to the receiving bank (`<paymentId>:recall-request`). Which channel it uses
+   (FAST message, SİPER or bilateral) is unverified (08 §2.7) and is the gateway's choice. Nothing moves money.
+3. The instance waits for the gateway's answer event or for `pay-recall-policy`'s first wait (TR FAST: P2D),
+   then reads the gateway's recall status. PENDING waits once more (P5D) and reads again. Two reads at most; the
+   event only wakes the instance.
+4. RETURNED: `pay` applies the return (`<paymentId>:apply-return`, the pivot of P6). `pay` checks that the
+   return the gateway linked is not more than the original (02 §3.2, `SchemeReturn`) and credits the customer.
+   The case closes RETURNED and the customer is told.
+5. DECLINED, still PENDING after the final wait, or a return `pay` cannot match (422 `RETURN_NOT_MATCHED`): the
+   case closes UNRESOLVED and the customer is told the recall did not succeed (08 §2.7 sends them to the legal
+   route). A return that arrives later is booked by `pay`'s incoming FAST flow (TR-03), not by this process.
+6. An unknown recall status, a crafted id or a rail without a gateway stops the instance on an incident.
+
+No person decides a money step in P6: only the gateway's RETURNED and `pay`'s match lead to a credit, so this
+profile has no user task and needs no four eyes. An operations task for a case that stays PENDING is left for
+the round that adds it to the staff screens.
+
+The instance holds `paymentId`, `jurisdiction`, `rail`, `recallPolicy`, `recallRequestRef`, `recallSignal`,
+`recallStatus`, `journalRef` and `notificationRef`; the CPT suite checks the list and the size.
+
 ## Hypotheses and success metrics
 
 Each process is a bet that Camunda closes a case class faster or safer than people working from the payments
@@ -87,7 +114,7 @@ P9 and P24 come last because their owning contexts (`liq`, `reconciliation`) do 
 
 | Order | Process | Money at risk | Uncertainty | Why here |
 |---|---|---|---|---|
-| 1 | P6 return, recall, misdirected credit | High: money already left the bank | High: no FAST return message confirmed (08 §2.1) | Most money exposed and the biggest unknown in the rail's rules |
+| 1 | P6 return, recall, misdirected credit (sending side built in round 2) | High: money already left the bank | High: no FAST return message confirmed (08 §2.1) | Most money exposed and the biggest unknown in the rail's rules |
 | 2 | `tr-siper-fraud-case` | High: blocks on customer funds | High: risk flag, block authority and block duration unverified (08 §2.6) | Regulator-facing, needs four-eyes, calls P6 |
 | 3 | P8 Güvenli Ödeme escrow | Medium: funds held for days | Medium: registration channel and refund period unverified (08 §2.5) | Builds on the ledger hold already used by P2 |
 | 4 | P7 Ödeme İste | Low: a request moves no money | Medium: partial and early payment support unverified (GTR-10) | Customer-visible, but failure only leaves a request open |
@@ -95,15 +122,17 @@ P9 and P24 come last because their owning contexts (`liq`, `reconciliation`) do 
 | 6 | P9 TCMB liquidity top-up | High | High: mechanism unverified; `liq` does not exist | Blocked on a new context |
 | 7 | P24 FAST reconciliation breaks | Medium | High: report format unverified; `reconciliation` does not exist | Blocked on a new context |
 
-## What P2 needs from other repositories
+## What P2 and P6 need from other repositories
 
 | Provider | Operation or event | Expectation | Owner |
 |---|---|---|---|
 | `pay` | `EXCEPTION_OWNED_BY_BPO` state and `Payment.ExceptionRaised.v1` on `evt.pay.payment.v1` | `contracts/expectations/pay.yaml` | Payment Orchestration |
 | `pay` | `recordExceptionDecision`, `markExceptionSettled`, `markExceptionRejected` | same | Payment Orchestration |
+| `pay` | P6: `Payment.RecallRequested.v1`, `applyFastReturn` (match and credit), `closeRecallCase` | same | Payment Orchestration |
 | `acc` | `captureHold`, `releaseHold` on the holds pay places (F5-K3) | `contracts/expectations/acc.yaml` | Core Banking ledger |
 | `psg-tr` | `getFastInstructionStatus` and `PaymentSchemes.Instruction.StatusReported.v1` | `contracts/expectations/psg-tr.yaml` | Payment Schemes (no repository on 2026-10-18) |
-| `ntf` | `sendNotification` with PAYMENT_SETTLED and PAYMENT_REJECTED | `contracts/expectations/ntf.yaml` | Notification (no repository on 2026-10-18) |
+| `psg-tr` | P6: `sendFastRecallRequest`, `getFastRecallStatus` and `PaymentSchemes.Recall.Answered.v1` | same | Payment Schemes |
+| `ntf` | `sendNotification` with PAYMENT_SETTLED, PAYMENT_REJECTED, RECALL_RETURNED and RECALL_UNRESOLVED | `contracts/expectations/ntf.yaml` | Notification (no repository on 2026-10-18) |
 | identity | client `svc-bpo-worker-payments` and its `azp` on each provider | `docs/identity-requests.md` | Platform identity |
 
 All of them are `requested`: none is in the catalog yet, so nothing here runs against a real service.
@@ -123,6 +152,9 @@ None of these blocks merging the models; each blocks deploying `bpo-worker-payme
   and identity entries exist before any provider admits it, only the event bridge publishes messages, and
   Operate and Tasklist stay staff tools. The worker chart, when it is written, refuses the `simulator` profile. Each provider already gets its
   own token scoped to its audience (`bpo.auth.scopes.<provider>`).
+- **G-P5 The credit on RETURNED rests on `pay`'s match.** `pay.apply-return` credits the customer; the check that
+  the return belongs to the payment and does not exceed it is `pay`'s (`applyFastReturn`, `requested`). The
+  simulator credits every return. The worker is not deployed against a real `pay` before that rule exists.
 - **G-P4** Governance records the design documents and the TCMB and BKM statements this file relies on.
 
 ## Values that are assumptions
@@ -133,8 +165,9 @@ None of these blocks merging the models; each blocks deploying `bpo-worker-payme
 - The operations SLAs (PT30M and PT2H) and the queue names. 05 §12 proposes measuring the first month and then
   fixing them.
 - A separate FAST return or recall message: the design confirms the return rule for EFT only, not for FAST
-  (08 §2.1, marked unverified). P6 assumes a return is a new
-  FAST transfer from the receiving bank referring to the original one.
+  (08 §2.1, marked unverified). P6 assumes a return is a new FAST transfer from the receiving bank that the
+  gateway links to the original one (08 §2.7 step 4).
+- The P6 waits (P2D, then P5D) and the two-read limit. The FAST recall time limits are unverified (08 §2.7).
 
 ## Not in this round
 

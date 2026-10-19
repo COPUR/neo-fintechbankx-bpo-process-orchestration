@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 public class NotifyPaymentWorker {
 
     private static final Set<String> OUTPUTS = Set.of("notificationRef");
-    private static final Set<String> PURPOSES = Set.of("PAYMENT_SETTLED", "PAYMENT_REJECTED");
+    private static final Set<String> PURPOSES = Set.of("PAYMENT_SETTLED", "PAYMENT_REJECTED", "RECALL_RETURNED", "RECALL_UNRESOLVED");
     private final NotificationPort notifications;
 
     public NotifyPaymentWorker(NotificationPort notifications) {

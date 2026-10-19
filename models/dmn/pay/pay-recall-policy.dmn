@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="Definitions_PayRecallPolicy" name="pay recall policy"
+             namespace="https://fintechbankx.example/bpo"
+             modeler:executionPlatform="Camunda Cloud"
+             modeler:executionPlatformVersion="8.10.0">
+  <!-- Waits only (P6, 08 §2.7 "süre sınırları DMN'de parametre olarak tutulur"): how long a recall request waits
+       for the receiving bank's answer before the gateway is read again, and how long the last wait is. The FAST
+       time limits are not verified (08 §2.7); these values are assumptions until Governance records them. No
+       amount, eligibility or reason rule. -->
+  <decision id="pay-recall-policy" name="Recall answer waits">
+    <extensionElements>
+      <zeebe:versionTag value="0.1.0" />
+    </extensionElements>
+    <decisionTable id="DecisionTable_RecallPolicy" hitPolicy="FIRST">
+      <input id="Input_Jurisdiction" label="Jurisdiction">
+        <inputExpression id="InputExpression_Jurisdiction" typeRef="string">
+          <text>jurisdiction</text>
+        </inputExpression>
+      </input>
+      <input id="Input_Rail" label="Rail">
+        <inputExpression id="InputExpression_Rail" typeRef="string">
+          <text>rail</text>
+        </inputExpression>
+      </input>
+      <output id="Output_FirstWait" label="First wait" name="firstWait" typeRef="string" />
+      <output id="Output_FinalWait" label="Final wait" name="finalWait" typeRef="string" />
+      <rule id="Rule_TrFast">
+        <inputEntry id="InputEntry_TrFast_J"><text>"TR"</text></inputEntry>
+        <inputEntry id="InputEntry_TrFast_R"><text>"FAST"</text></inputEntry>
+        <outputEntry id="OutputEntry_TrFast_F"><text>"P2D"</text></outputEntry>
+        <outputEntry id="OutputEntry_TrFast_L"><text>"P5D"</text></outputEntry>
+      </rule>
+      <rule id="Rule_Default">
+        <inputEntry id="InputEntry_Default_J"><text>-</text></inputEntry>
+        <inputEntry id="InputEntry_Default_R"><text>-</text></inputEntry>
+        <outputEntry id="OutputEntry_Default_F"><text>"P5D"</text></outputEntry>
+        <outputEntry id="OutputEntry_Default_L"><text>"P10D"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

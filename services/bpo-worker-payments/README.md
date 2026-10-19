@@ -2,8 +2,8 @@
 
 Job workers for the **payments** family (package `com.bank.bpo.payments`, Keycloak client `svc-bpo-worker-payments`).
 
-Live: P2 `pay-instant-exception` with `lib-await-external-status`, TR FAST profile (`docs/packages/tr-fast.md`).
-Planned: P5 bulk file execution, P6 return and recall, P7 request to pay, P8 safe payment escrow (owners: Payment
+Live: P2 `pay-instant-exception` with `lib-await-external-status` and P6 `pay-return-recall` (sending side), TR FAST
+profile (`docs/packages/tr-fast.md`). Planned: P5 bulk file execution, P7 request to pay, P8 safe payment escrow (owners: Payment
 Orchestration; Recurring and Bulk for P5/P7).
 
 Same layout as `bpo-worker-onboarding`: one port per provider, one adapter per port over `ProviderHttp`, one handler
@@ -16,7 +16,11 @@ per job type, and a `JobTypeContractTest` that ties the served job types to `mod
 | `acc.release-hold` | acc | `<paymentId>:release` |
 | `pay.record-exception-decision` | pay | `<paymentId>:record-exception-decision` |
 | `pay.mark-settled`, `pay.mark-rejected` | pay | `<paymentId>:mark-settled`, `<paymentId>:mark-rejected` |
-| `ntf.notify-payment` | ntf | `<paymentId>:notify-payment-settled` or `-rejected` |
+| `psg.send-recall-request` | psg-tr (rail FAST only) | `<paymentId>:recall-request` |
+| `psg.recall-status` | psg-tr (rail FAST only) | read only |
+| `pay.apply-return` (pivot) | pay | `<paymentId>:apply-return` |
+| `pay.close-recall` | pay | `<paymentId>:close-recall` |
+| `ntf.notify-payment` | ntf | `<paymentId>:notify-<purpose>`, for example `notify-recall-returned` |
 
 The deployment runs only in the jurisdiction cluster it serves; the TR deployment is the one configured with
 `BPO_PROVIDER_PSG_TR_URL`.

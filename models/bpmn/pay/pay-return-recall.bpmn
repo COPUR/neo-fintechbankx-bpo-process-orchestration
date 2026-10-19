@@ -1,0 +1,435 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:modeler="http://camunda.org/schema/modeler/1.0"
+                  id="Definitions_PayReturnRecall"
+                  targetNamespace="https://fintechbankx.example/bpo"
+                  exporter="fbx-bpo" exporterVersion="0.1.0"
+                  modeler:executionPlatform="Camunda Cloud"
+                  modeler:executionPlatformVersion="8.10.0">
+  <bpmn:error id="Error_ReturnNotMatched" name="Err_ReturnNotMatched" errorCode="Err_ReturnNotMatched" />
+  <bpmn:message id="Message_RecallAnswered" name="Msg_RecallAnswered">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=paymentId" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <!-- P6 TR profile (05 §6.1 and §6, 08 §2.7, TR-05 in 08 §10.1): the sending bank asks for a FAST payment back
+       after the customer says it went to the wrong place. pay opens the recall case and the event bridge starts
+       this instance with paymentId, jurisdiction and rail. The gateway sends the request (channel unverified,
+       08 §2.7) and keeps the receiving bank's answer; the answer event only wakes the instance, which re-reads
+       the gateway. Two waits at most (pay-recall-policy), unrolled so no timer sits in a loop. Only the gateway's
+       RETURNED leads to pay.apply-return, where pay matches the return to the original and credits the customer;
+       anything else closes the case UNRESOLVED and the customer is told the recall did not succeed. No person
+       decides a money step here, so no four-eyes task is needed in this profile. Camunda holds ids and enums
+       only. -->
+  <bpmn:process id="pay-return-recall" name="Payment return and recall" isExecutable="true">
+    <bpmn:extensionElements>
+      <zeebe:versionTag value="0.1.0" />
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="StartEvent_RecallRequested" name="Recall requested">
+      <bpmn:outgoing>Flow_ToPolicy</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:businessRuleTask id="Task_RecallPolicy" name="Pick the answer waits">
+      <bpmn:extensionElements>
+        <zeebe:calledDecision decisionId="pay-recall-policy" resultVariable="recallPolicy" bindingType="versionTag" versionTag="0.1.0" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToPolicy</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToSendRequest</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:serviceTask id="Task_SendRecallRequest" name="Send the recall request">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="psg.send-recall-request" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToSendRequest</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToAwaitFirst</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:eventBasedGateway id="Gateway_AwaitFirst" name="Await the answer">
+      <bpmn:incoming>Flow_ToAwaitFirst</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToAnsweredFirst</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToFirstWait</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="Msg_RecallAnsweredFirst" name="Receiving bank answered">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=&#34;RECEIVED&#34;" target="recallSignal" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToAnsweredFirst</bpmn:incoming>
+      <bpmn:outgoing>Flow_AnsweredFirstToJoin</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_AnsweredFirst" messageRef="Message_RecallAnswered" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Timer_FirstWait" name="First wait over">
+      <bpmn:incoming>Flow_ToFirstWait</bpmn:incoming>
+      <bpmn:outgoing>Flow_FirstWaitToJoin</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_FirstWait">
+        <bpmn:timeDuration>=recallPolicy.firstWait</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinFirstRead">
+      <bpmn:incoming>Flow_AnsweredFirstToJoin</bpmn:incoming>
+      <bpmn:incoming>Flow_FirstWaitToJoin</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToReadFirst</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_ReadRecallFirst" name="Read the recall status">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="psg.recall-status" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToReadFirst</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToFirstStatus</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <!-- Only the gateway's RETURNED leads to the money step, and pay still matches the return before it credits. -->
+    <bpmn:exclusiveGateway id="Gateway_FirstStatus" name="Recall status?" default="Flow_FirstPending">
+      <bpmn:incoming>Flow_ToFirstStatus</bpmn:incoming>
+      <bpmn:outgoing>Flow_FirstReturned</bpmn:outgoing>
+      <bpmn:outgoing>Flow_FirstDeclined</bpmn:outgoing>
+      <bpmn:outgoing>Flow_FirstPending</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:eventBasedGateway id="Gateway_AwaitFinal" name="Await the answer once more">
+      <bpmn:incoming>Flow_FirstPending</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToAnsweredFinal</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToFinalWait</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="Msg_RecallAnsweredFinal" name="Receiving bank answered">
+      <bpmn:extensionElements>
+        <zeebe:ioMapping>
+          <zeebe:output source="=&#34;RECEIVED&#34;" target="recallSignal" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToAnsweredFinal</bpmn:incoming>
+      <bpmn:outgoing>Flow_AnsweredFinalToJoin</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MessageEventDefinition_AnsweredFinal" messageRef="Message_RecallAnswered" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Timer_FinalWait" name="Final wait over">
+      <bpmn:incoming>Flow_ToFinalWait</bpmn:incoming>
+      <bpmn:outgoing>Flow_FinalWaitToJoin</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="TimerEventDefinition_FinalWait">
+        <bpmn:timeDuration>=recallPolicy.finalWait</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinFinalRead">
+      <bpmn:incoming>Flow_AnsweredFinalToJoin</bpmn:incoming>
+      <bpmn:incoming>Flow_FinalWaitToJoin</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToReadFinal</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_ReadRecallFinal" name="Read the recall status again">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="psg.recall-status" retries="5" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToReadFinal</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToFinalStatus</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_FinalStatus" name="Returned?" default="Flow_FinalUnresolved">
+      <bpmn:incoming>Flow_ToFinalStatus</bpmn:incoming>
+      <bpmn:outgoing>Flow_FinalReturned</bpmn:outgoing>
+      <bpmn:outgoing>Flow_FinalUnresolved</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="Gateway_JoinApplyReturn">
+      <bpmn:incoming>Flow_FirstReturned</bpmn:incoming>
+      <bpmn:incoming>Flow_FinalReturned</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToApplyReturn</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_ApplyReturn" name="Credit the customer from the return">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="pay.apply-return" retries="5" />
+        <zeebe:properties>
+          <!-- Pivot (05 §7): pay matches the return to the original and credits the customer; only retryable steps follow. -->
+          <zeebe:property name="bpo:pivot" value="true" />
+        </zeebe:properties>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToApplyReturn</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCloseReturned</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="BoundaryEvent_ReturnNotMatched" name="Return not matched" attachedToRef="Task_ApplyReturn">
+      <bpmn:outgoing>Flow_NotMatchedToJoin</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="ErrorEventDefinition_ReturnNotMatched" errorRef="Error_ReturnNotMatched" />
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="Task_CloseReturned" name="Close the recall case: returned">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="pay.close-recall" retries="5" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;RETURNED&#34;" target="recallOutcome" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToCloseReturned</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToNotifyReturned</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_NotifyReturned" name="Notify customer: money returned">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="ntf.notify-payment" retries="5" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;RECALL_RETURNED&#34;" target="purpose" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToNotifyReturned</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToReturned</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndEvent_Returned" name="Money returned">
+      <bpmn:incoming>Flow_ToReturned</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="Gateway_JoinUnresolved">
+      <bpmn:incoming>Flow_FirstDeclined</bpmn:incoming>
+      <bpmn:incoming>Flow_FinalUnresolved</bpmn:incoming>
+      <bpmn:incoming>Flow_NotMatchedToJoin</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCloseUnresolved</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_CloseUnresolved" name="Close the recall case: unresolved">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="pay.close-recall" retries="5" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;UNRESOLVED&#34;" target="recallOutcome" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToCloseUnresolved</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToNotifyUnresolved</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_NotifyUnresolved" name="Notify customer: recall not resolved">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="ntf.notify-payment" retries="5" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;RECALL_UNRESOLVED&#34;" target="purpose" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToNotifyUnresolved</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToUnresolved</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="EndEvent_Unresolved" name="Recall not resolved">
+      <bpmn:incoming>Flow_ToUnresolved</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_ToPolicy" sourceRef="StartEvent_RecallRequested" targetRef="Task_RecallPolicy" />
+    <bpmn:sequenceFlow id="Flow_ToSendRequest" sourceRef="Task_RecallPolicy" targetRef="Task_SendRecallRequest" />
+    <bpmn:sequenceFlow id="Flow_ToAwaitFirst" sourceRef="Task_SendRecallRequest" targetRef="Gateway_AwaitFirst" />
+    <bpmn:sequenceFlow id="Flow_ToAnsweredFirst" sourceRef="Gateway_AwaitFirst" targetRef="Msg_RecallAnsweredFirst" />
+    <bpmn:sequenceFlow id="Flow_ToFirstWait" sourceRef="Gateway_AwaitFirst" targetRef="Timer_FirstWait" />
+    <bpmn:sequenceFlow id="Flow_AnsweredFirstToJoin" sourceRef="Msg_RecallAnsweredFirst" targetRef="Gateway_JoinFirstRead" />
+    <bpmn:sequenceFlow id="Flow_FirstWaitToJoin" sourceRef="Timer_FirstWait" targetRef="Gateway_JoinFirstRead" />
+    <bpmn:sequenceFlow id="Flow_ToReadFirst" sourceRef="Gateway_JoinFirstRead" targetRef="Task_ReadRecallFirst" />
+    <bpmn:sequenceFlow id="Flow_ToFirstStatus" sourceRef="Task_ReadRecallFirst" targetRef="Gateway_FirstStatus" />
+    <bpmn:sequenceFlow id="Flow_FirstReturned" name="RETURNED" sourceRef="Gateway_FirstStatus" targetRef="Gateway_JoinApplyReturn">
+      <bpmn:conditionExpression>=recallStatus = "RETURNED"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_FirstDeclined" name="DECLINED" sourceRef="Gateway_FirstStatus" targetRef="Gateway_JoinUnresolved">
+      <bpmn:conditionExpression>=recallStatus = "DECLINED"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_FirstPending" name="PENDING" sourceRef="Gateway_FirstStatus" targetRef="Gateway_AwaitFinal" />
+    <bpmn:sequenceFlow id="Flow_ToAnsweredFinal" sourceRef="Gateway_AwaitFinal" targetRef="Msg_RecallAnsweredFinal" />
+    <bpmn:sequenceFlow id="Flow_ToFinalWait" sourceRef="Gateway_AwaitFinal" targetRef="Timer_FinalWait" />
+    <bpmn:sequenceFlow id="Flow_AnsweredFinalToJoin" sourceRef="Msg_RecallAnsweredFinal" targetRef="Gateway_JoinFinalRead" />
+    <bpmn:sequenceFlow id="Flow_FinalWaitToJoin" sourceRef="Timer_FinalWait" targetRef="Gateway_JoinFinalRead" />
+    <bpmn:sequenceFlow id="Flow_ToReadFinal" sourceRef="Gateway_JoinFinalRead" targetRef="Task_ReadRecallFinal" />
+    <bpmn:sequenceFlow id="Flow_ToFinalStatus" sourceRef="Task_ReadRecallFinal" targetRef="Gateway_FinalStatus" />
+    <bpmn:sequenceFlow id="Flow_FinalReturned" name="RETURNED" sourceRef="Gateway_FinalStatus" targetRef="Gateway_JoinApplyReturn">
+      <bpmn:conditionExpression>=recallStatus = "RETURNED"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_FinalUnresolved" name="DECLINED or PENDING" sourceRef="Gateway_FinalStatus" targetRef="Gateway_JoinUnresolved" />
+    <bpmn:sequenceFlow id="Flow_ToApplyReturn" sourceRef="Gateway_JoinApplyReturn" targetRef="Task_ApplyReturn" />
+    <bpmn:sequenceFlow id="Flow_NotMatchedToJoin" sourceRef="BoundaryEvent_ReturnNotMatched" targetRef="Gateway_JoinUnresolved" />
+    <bpmn:sequenceFlow id="Flow_ToCloseReturned" sourceRef="Task_ApplyReturn" targetRef="Task_CloseReturned" />
+    <bpmn:sequenceFlow id="Flow_ToNotifyReturned" sourceRef="Task_CloseReturned" targetRef="Task_NotifyReturned" />
+    <bpmn:sequenceFlow id="Flow_ToReturned" sourceRef="Task_NotifyReturned" targetRef="EndEvent_Returned" />
+    <bpmn:sequenceFlow id="Flow_ToCloseUnresolved" sourceRef="Gateway_JoinUnresolved" targetRef="Task_CloseUnresolved" />
+    <bpmn:sequenceFlow id="Flow_ToNotifyUnresolved" sourceRef="Task_CloseUnresolved" targetRef="Task_NotifyUnresolved" />
+    <bpmn:sequenceFlow id="Flow_ToUnresolved" sourceRef="Task_NotifyUnresolved" targetRef="EndEvent_Unresolved" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="pay-return-recall">
+      <bpmndi:BPMNShape id="StartEvent_RecallRequested_di" bpmnElement="StartEvent_RecallRequested">
+        <dc:Bounds x="102" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RecallPolicy_di" bpmnElement="Task_RecallPolicy">
+        <dc:Bounds x="240" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendRecallRequest_di" bpmnElement="Task_SendRecallRequest">
+        <dc:Bounds x="410" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_AwaitFirst_di" bpmnElement="Gateway_AwaitFirst">
+        <dc:Bounds x="605" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Msg_RecallAnsweredFirst_di" bpmnElement="Msg_RecallAnsweredFirst">
+        <dc:Bounds x="782" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timer_FirstWait_di" bpmnElement="Timer_FirstWait">
+        <dc:Bounds x="782" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinFirstRead_di" bpmnElement="Gateway_JoinFirstRead">
+        <dc:Bounds x="945" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReadRecallFirst_di" bpmnElement="Task_ReadRecallFirst">
+        <dc:Bounds x="1090" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_FirstStatus_di" bpmnElement="Gateway_FirstStatus">
+        <dc:Bounds x="1285" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_AwaitFinal_di" bpmnElement="Gateway_AwaitFinal">
+        <dc:Bounds x="1455" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Msg_RecallAnsweredFinal_di" bpmnElement="Msg_RecallAnsweredFinal">
+        <dc:Bounds x="1632" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timer_FinalWait_di" bpmnElement="Timer_FinalWait">
+        <dc:Bounds x="1632" y="252" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinFinalRead_di" bpmnElement="Gateway_JoinFinalRead">
+        <dc:Bounds x="1795" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReadRecallFinal_di" bpmnElement="Task_ReadRecallFinal">
+        <dc:Bounds x="1940" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_FinalStatus_di" bpmnElement="Gateway_FinalStatus">
+        <dc:Bounds x="2135" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinApplyReturn_di" bpmnElement="Gateway_JoinApplyReturn">
+        <dc:Bounds x="2305" y="95" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ApplyReturn_di" bpmnElement="Task_ApplyReturn">
+        <dc:Bounds x="2450" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CloseReturned_di" bpmnElement="Task_CloseReturned">
+        <dc:Bounds x="2620" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_JoinUnresolved_di" bpmnElement="Gateway_JoinUnresolved">
+        <dc:Bounds x="2645" y="245" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyReturned_di" bpmnElement="Task_NotifyReturned">
+        <dc:Bounds x="2790" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CloseUnresolved_di" bpmnElement="Task_CloseUnresolved">
+        <dc:Bounds x="2790" y="230" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Returned_di" bpmnElement="EndEvent_Returned">
+        <dc:Bounds x="2992" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyUnresolved_di" bpmnElement="Task_NotifyUnresolved">
+        <dc:Bounds x="2960" y="230" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Unresolved_di" bpmnElement="EndEvent_Unresolved">
+        <dc:Bounds x="3162" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BoundaryEvent_ReturnNotMatched_di" bpmnElement="BoundaryEvent_ReturnNotMatched">
+        <dc:Bounds x="2500" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_ToPolicy_di" bpmnElement="Flow_ToPolicy">
+        <di:waypoint x="120" y="120" />
+        <di:waypoint x="290" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToSendRequest_di" bpmnElement="Flow_ToSendRequest">
+        <di:waypoint x="290" y="120" />
+        <di:waypoint x="460" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToAwaitFirst_di" bpmnElement="Flow_ToAwaitFirst">
+        <di:waypoint x="460" y="120" />
+        <di:waypoint x="630" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToAnsweredFirst_di" bpmnElement="Flow_ToAnsweredFirst">
+        <di:waypoint x="630" y="120" />
+        <di:waypoint x="800" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToFirstWait_di" bpmnElement="Flow_ToFirstWait">
+        <di:waypoint x="630" y="120" />
+        <di:waypoint x="630" y="270" />
+        <di:waypoint x="800" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AnsweredFirstToJoin_di" bpmnElement="Flow_AnsweredFirstToJoin">
+        <di:waypoint x="800" y="120" />
+        <di:waypoint x="970" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FirstWaitToJoin_di" bpmnElement="Flow_FirstWaitToJoin">
+        <di:waypoint x="800" y="270" />
+        <di:waypoint x="800" y="120" />
+        <di:waypoint x="970" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToReadFirst_di" bpmnElement="Flow_ToReadFirst">
+        <di:waypoint x="970" y="120" />
+        <di:waypoint x="1140" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToFirstStatus_di" bpmnElement="Flow_ToFirstStatus">
+        <di:waypoint x="1140" y="120" />
+        <di:waypoint x="1310" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FirstReturned_di" bpmnElement="Flow_FirstReturned">
+        <di:waypoint x="1310" y="120" />
+        <di:waypoint x="2330" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FirstDeclined_di" bpmnElement="Flow_FirstDeclined">
+        <di:waypoint x="1310" y="120" />
+        <di:waypoint x="1310" y="270" />
+        <di:waypoint x="2670" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FirstPending_di" bpmnElement="Flow_FirstPending">
+        <di:waypoint x="1310" y="120" />
+        <di:waypoint x="1480" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToAnsweredFinal_di" bpmnElement="Flow_ToAnsweredFinal">
+        <di:waypoint x="1480" y="120" />
+        <di:waypoint x="1650" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToFinalWait_di" bpmnElement="Flow_ToFinalWait">
+        <di:waypoint x="1480" y="120" />
+        <di:waypoint x="1480" y="270" />
+        <di:waypoint x="1650" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_AnsweredFinalToJoin_di" bpmnElement="Flow_AnsweredFinalToJoin">
+        <di:waypoint x="1650" y="120" />
+        <di:waypoint x="1820" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FinalWaitToJoin_di" bpmnElement="Flow_FinalWaitToJoin">
+        <di:waypoint x="1650" y="270" />
+        <di:waypoint x="1650" y="120" />
+        <di:waypoint x="1820" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToReadFinal_di" bpmnElement="Flow_ToReadFinal">
+        <di:waypoint x="1820" y="120" />
+        <di:waypoint x="1990" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToFinalStatus_di" bpmnElement="Flow_ToFinalStatus">
+        <di:waypoint x="1990" y="120" />
+        <di:waypoint x="2160" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FinalReturned_di" bpmnElement="Flow_FinalReturned">
+        <di:waypoint x="2160" y="120" />
+        <di:waypoint x="2330" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_FinalUnresolved_di" bpmnElement="Flow_FinalUnresolved">
+        <di:waypoint x="2160" y="120" />
+        <di:waypoint x="2160" y="270" />
+        <di:waypoint x="2670" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToApplyReturn_di" bpmnElement="Flow_ToApplyReturn">
+        <di:waypoint x="2330" y="120" />
+        <di:waypoint x="2500" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_NotMatchedToJoin_di" bpmnElement="Flow_NotMatchedToJoin">
+        <di:waypoint x="2518" y="160" />
+        <di:waypoint x="2518" y="270" />
+        <di:waypoint x="2670" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToCloseReturned_di" bpmnElement="Flow_ToCloseReturned">
+        <di:waypoint x="2500" y="120" />
+        <di:waypoint x="2670" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToNotifyReturned_di" bpmnElement="Flow_ToNotifyReturned">
+        <di:waypoint x="2670" y="120" />
+        <di:waypoint x="2840" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToReturned_di" bpmnElement="Flow_ToReturned">
+        <di:waypoint x="2840" y="120" />
+        <di:waypoint x="3010" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToCloseUnresolved_di" bpmnElement="Flow_ToCloseUnresolved">
+        <di:waypoint x="2670" y="270" />
+        <di:waypoint x="2840" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToNotifyUnresolved_di" bpmnElement="Flow_ToNotifyUnresolved">
+        <di:waypoint x="2840" y="270" />
+        <di:waypoint x="3010" y="270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToUnresolved_di" bpmnElement="Flow_ToUnresolved">
+        <di:waypoint x="3010" y="270" />
+        <di:waypoint x="3010" y="120" />
+        <di:waypoint x="3180" y="120" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

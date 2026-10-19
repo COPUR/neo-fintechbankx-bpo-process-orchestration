@@ -3,6 +3,7 @@ package com.bank.bpo.payments.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
+import com.bank.bpo.payments.port.PaymentRecallPort;
 import com.bank.bpo.simulator.DomainSimulator;
 import com.bank.bpo.workerkit.ProviderException;
 import com.bank.bpo.workerkit.ProviderHttp;
@@ -28,6 +29,8 @@ class AdapterBoundaryTest {
     private final AccHoldAdapter acc = new AccHoldAdapter(HTTP);
     private final PayExceptionAdapter pay = new PayExceptionAdapter(HTTP);
     private final NtfNotificationAdapter ntf = new NtfNotificationAdapter(HTTP);
+    private final PsgTrRecallAdapter recall = new PsgTrRecallAdapter(HTTP);
+    private final PayRecallAdapter payRecall = new PayRecallAdapter(HTTP);
 
     @AfterAll
     static void stop() {
@@ -55,7 +58,11 @@ class AdapterBoundaryTest {
             (id) -> pay.markSettled(id, "jr-1", "k"),
             (id) -> pay.markSettled("pay-1", id, "k"),
             (id) -> pay.markRejected(id, "k"),
-            (id) -> ntf.notify(id, "PAYMENT_SETTLED", "k"));
+            (id) -> ntf.notify(id, "PAYMENT_SETTLED", "k"),
+            (id) -> recall.request("FAST", id, "k"),
+            (id) -> recall.statusOf("FAST", id),
+            (id) -> payRecall.applyReturn(id, "k"),
+            (id) -> payRecall.close(id, PaymentRecallPort.Outcome.UNRESOLVED, "k"));
         for (Consumer<String> call : calls) {
             for (String id : CRAFTED) {
                 contractFault(() -> call.accept(id));
@@ -73,6 +80,18 @@ class AdapterBoundaryTest {
         contractFault(() -> acc.capture("pay-1", "pay-1:capture"));
         SIM.answerRaw("capture-hold", 200, "{\"journalRef\":\"../x\"}", 1);
         contractFault(() -> acc.capture("pay-1", "pay-1:capture"));
+    }
+
+    @Test
+    void aRecallAnswerWithoutItsFieldOrOutsideItsCodesIsAContractFault() {
+        SIM.answerRaw("send-recall-request", 202, "{}", 1);
+        contractFault(() -> recall.request("FAST", "pay-1", "pay-1:recall-request"));
+        SIM.answerRaw("recall-status", 200, "{\"recallStatus\":\"MAYBE\"}", 1);
+        contractFault(() -> recall.statusOf("FAST", "pay-1"));
+        SIM.answerRaw("apply-return", 201, "{\"journalRef\":\"../x\"}", 1);
+        contractFault(() -> payRecall.applyReturn("pay-1", "pay-1:apply-return"));
+        contractFault(() -> recall.request("AANI", "pay-1", "k"));
+        assertThat(SIM.callsTo("/api/v1/psg-tr/fast/instructions/pay-1/recall-requests")).hasSize(1);
     }
 
     @Test

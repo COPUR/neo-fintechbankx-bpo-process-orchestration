@@ -3,10 +3,14 @@ package com.bank.bpo.payments;
 import com.bank.bpo.payments.adapter.AccHoldAdapter;
 import com.bank.bpo.payments.adapter.NtfNotificationAdapter;
 import com.bank.bpo.payments.adapter.PayExceptionAdapter;
+import com.bank.bpo.payments.adapter.PayRecallAdapter;
+import com.bank.bpo.payments.adapter.PsgTrRecallAdapter;
 import com.bank.bpo.payments.adapter.PsgTrSchemeStatusAdapter;
 import com.bank.bpo.payments.port.HoldPort;
 import com.bank.bpo.payments.port.NotificationPort;
 import com.bank.bpo.payments.port.PaymentExceptionPort;
+import com.bank.bpo.payments.port.PaymentRecallPort;
+import com.bank.bpo.payments.port.RecallPort;
 import com.bank.bpo.payments.port.SchemeStatusPort;
 import com.bank.bpo.workerkit.ClientCredentialsToken;
 import com.bank.bpo.workerkit.ProviderHttp;
@@ -76,6 +80,18 @@ class ProviderConfiguration {
     SchemeStatusPort schemeStatusPort(@Value("${bpo.providers.psg-tr.base-url}") String url,
                                       @Value("${bpo.auth.scopes.psg-tr:}") String scope, WorkerTokens tokens) {
         return new PsgTrSchemeStatusAdapter(http(url, tokens.scoped("psg-tr", scope)));
+    }
+
+    @Bean
+    RecallPort recallPort(@Value("${bpo.providers.psg-tr.base-url}") String url,
+                          @Value("${bpo.auth.scopes.psg-tr:}") String scope, WorkerTokens tokens) {
+        return new PsgTrRecallAdapter(http(url, tokens.scoped("psg-tr", scope)));
+    }
+
+    @Bean
+    PaymentRecallPort paymentRecallPort(@Value("${bpo.providers.pay.base-url}") String url,
+                                        @Value("${bpo.auth.scopes.pay:}") String scope, WorkerTokens tokens) {
+        return new PayRecallAdapter(http(url, tokens.scoped("pay", scope)));
     }
 
     @Bean

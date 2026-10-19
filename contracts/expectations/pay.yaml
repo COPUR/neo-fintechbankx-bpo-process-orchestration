@@ -30,7 +30,31 @@ operations:
     caller: svc-bpo-worker-payments
     request: {}
     response: {}
+  applyFastReturn:
+    status: requested
+    method: POST
+    path: /api/v1/payments/{paymentId}/recall/apply-return
+    idempotencyKey: "<paymentId>:apply-return"
+    caller: svc-bpo-worker-payments
+    request: {}
+    response: {journalRef: id}
+    rule: pay takes the return the gateway linked to the payment, checks it is not more than the original amount and credits the customer through acc; 422 RETURN_NOT_MATCHED when there is no such return or it does not match (the process closes the case UNRESOLVED); a replay with the same key returns the same journalRef
+  closeRecallCase:
+    status: requested
+    method: POST
+    path: /api/v1/payments/{paymentId}/recall/close
+    idempotencyKey: "<paymentId>:close-recall"
+    caller: svc-bpo-worker-payments
+    request: {outcome: [RETURNED, UNRESOLVED]}
+    response: {}
 events:
+  RecallRequested:
+    status: requested
+    topic: evt.pay.payment.v1
+    eventType: Payment.RecallRequested.v1
+    key: paymentId
+    fields: {paymentId: id, jurisdiction: [AE, TR], rail: [FAST]}
+    note: pay opens the recall case on the customer's request and emits this; the event bridge starts pay-return-recall from it. No amount, party or reason text.
   ExceptionRaised:
     status: requested
     topic: evt.pay.payment.v1

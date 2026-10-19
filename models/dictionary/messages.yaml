@@ -4,4 +4,5 @@
 # Only the event bridge client (svc-bpo-event-bridge) may publish messages (docs/identity-requests.md).
 messages:
   Msg_KycCompleted: {correlationKey: applicationId, source: evt.cus.customer.v1 (requested event), ttl: PT10M, variables: [], publisher: svc-bpo-event-bridge, then: Task_RecheckKyc re-reads cus}
+  Msg_RecallAnswered: {correlationKey: paymentId, source: evt.psg.tr.v1 (requested event), ttl: PT10M, variables: [], publisher: svc-bpo-event-bridge, then: psg.recall-status re-reads psg-tr}
   Msg_SchemeStatusReported: {correlationKey: sourceRef (the paymentId), source: evt.psg.tr.v1 (requested event), ttl: PT10M, variables: [], publisher: svc-bpo-event-bridge, then: the next psg.status-inquiry re-reads psg-tr}
