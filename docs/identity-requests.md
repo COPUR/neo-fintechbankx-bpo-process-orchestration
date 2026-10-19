@@ -25,15 +25,18 @@ Provider audiences for `svc-bpo-worker-onboarding` (the existing client ids, so 
 | ntf | none yet | sendNotification | no client exists; created with the service |
 
 Queue groups for staff: each queue `<queue>` below is a directory group `cn=fbx-<queue>` that the token carries
-as `/staff/fbx-<queue>` (`bpo-process-api` drops the `/staff/fbx-` prefix and ignores every other group). Queue
+as `/staff/fbx-<queue>` (the ten queue groups and the staff browser flow: repository `fintechbankx-platform-identity-iam-keycloak-ldap` at `38b6d73`, `docs/identity/REALM_AS_CODE.md`, sections "Groups" and
+"Who signs in to staff web") (`bpo-process-api` drops the `/staff/fbx-` prefix and ignores every other group). Queue
 users also hold a staff role group and sign in through the realm's staff browser flow. The engine assignee is
-the token's `sub`, which never changes; `preferred_username` follows the directory and is only shown.
+the token's `sub`, which never changes; `preferred_username` follows the directory and is shown. Tasks claimed
+before the assignee was `sub` carry the user name, so four eyes also refuses a user whose current
+`preferred_username` is the maker task's assignee; that check only refuses, never grants.
 
 Separation of duties for staff (requested): no account holds a maker queue group and its checker queue group
 of the same process at once (`fbx-cmp-*-onboarding-l1` or `fbx-cmp-review-l1` with `fbx-cmp-*-mlro`,
 `fbx-cmp-tr-compliance-officer` or `fbx-cmp-review-l2`; `fbx-pay-tr-fast-ops` or `fbx-pay-ops-l1` with
-`fbx-pay-tr-fast-supervisor` or `fbx-pay-ops-l2`). The realm checks this at sign-in and reset only, so the API
-keeps its own refusal. `bpo-process-api` refuses the checker
+`fbx-pay-tr-fast-supervisor` or `fbx-pay-ops-l2`). The realm checks this at sign-in and reset only (same file, "Separation
+of duties for bpo staff queues" and gap 5: a refresh runs no flow), so the API keeps its own refusal. `bpo-process-api` refuses the checker
 task to whoever is the maker task's last recorded assignee, but the engine keeps no earlier assignees, so someone
 who released the maker task before it ended is only stopped by this rule.
 

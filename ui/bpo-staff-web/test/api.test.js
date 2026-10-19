@@ -23,10 +23,24 @@ test('every call sends the token with the DPoP scheme and a proof, never cookies
   const { rec, api: client } = await api([{ status: 200, body: [] }]);
   await client.list('compliance-analyst');
   const [call] = rec.calls;
-  assert.equal(call.url, 'https://api.example/api/v1/actors/compliance-analyst/tasks');
+  assert.equal(call.url, 'https://api.example/api/v1/actors/compliance-analyst/tasks?filter=all');
   assert.equal(call.headers.Authorization, 'DPoP tok');
   assert.equal(call.headers.DPoP.split('.').length, 3);
   assert.equal(call.credentials, 'omit');
+});
+
+test('a page request carries only checked values and the proof leaves the query out', async () => {
+  const { rec, api: client } = await api([{ status: 200, body: {} }]);
+  await client.list('payments-operations', { filter: 'open', limit: 50, cursor: 'MTc2MC4tLjQy', createdAfter: '2026-10-19T10:00:00.123Z' });
+  const [call] = rec.calls;
+  assert.equal(call.url, 'https://api.example/api/v1/actors/payments-operations/tasks?filter=open&limit=50&cursor=MTc2MC4tLjQy&createdAfter=2026-10-19T10%3A00%3A00.123Z');
+  const proof = JSON.parse(Buffer.from(call.headers.DPoP.split('.')[1], 'base64url').toString());
+  assert.equal(proof.htu, 'https://api.example/api/v1/actors/payments-operations/tasks');
+  for (const bad of [{ filter: 'others' }, { limit: 0 }, { limit: 101 }, { limit: '5' }, { cursor: 'a&b=c' },
+    { cursor: 'x'.repeat(97) }, { createdAfter: 'yesterday' }]) {
+    assert.throws(() => client.list('payments-operations', bad), (e) => e.code === 'QUERY_NOT_ALLOWED');
+  }
+  assert.equal(rec.calls.length, 1);
 });
 
 test('a decision sends the decision alone', async () => {

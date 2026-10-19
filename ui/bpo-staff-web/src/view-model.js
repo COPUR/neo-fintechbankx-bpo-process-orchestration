@@ -14,15 +14,10 @@ export function slaState(dueAt, now = Date.now()) {
   return left < DUE_SOON_MS ? 'due-soon' : 'on-track';
 }
 
-/** How many tasks each filter shows, for the filter labels. */
-export function filterCounts(tasks) {
-  return Object.fromEntries(FILTERS.map((f) => [f, filterTasks(tasks, f).length]));
-}
-
-/** Tasks in {@code fresh} that the shown list does not have yet; the list itself is not redrawn by a poll. */
-export function newTaskCount(shown, fresh) {
-  const known = new Set(shown.map((x) => String(x.taskKey)));
-  return fresh.filter((x) => !known.has(String(x.taskKey))).length;
+/** The filter totals the server counted over the whole list; anything but a count reads as 0. */
+export function filterCounts(counts) {
+  const n = (v) => (Number.isSafeInteger(v) && v >= 0 ? v : 0);
+  return Object.fromEntries(FILTERS.map((f) => [f, n(counts?.[f])]));
 }
 
 export function filterTasks(tasks, filter) {

@@ -95,4 +95,9 @@ personal data reaches the engine.
 | Reason (required): (o) Other                                                 |
 ```
 
-Next round: paging for long queues (an opaque cursor and a `{items, next}` response).
+Paging (built): 50 tasks a page, filter counts from the server for the whole list.
+
+```
+| ...                                                                          |
+| Showing 50 of 132 tasks.  [Show more]                                        |
+```

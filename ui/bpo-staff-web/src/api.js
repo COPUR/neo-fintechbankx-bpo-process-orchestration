@@ -6,6 +6,9 @@ import { createProof } from './dpop.js';
 
 export const ACTORS = ['compliance-analyst', 'compliance-senior', 'payments-operations', 'payments-supervisor'];
 const TASK_KEY = /^[0-9]{1,19}$/;
+const LIST_FILTERS = ['mine', 'open', 'all'];
+const CURSOR = /^[A-Za-z0-9_-]{1,96}$/;
+const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/;
 
 export class ApiError extends Error {
   constructor(status, code) {
@@ -62,7 +65,25 @@ export function createApi({ baseUrl, key, accessToken, fetchImpl = globalThis.fe
 
   return {
     me: () => call('GET', 'api/v1/me'),
-    list: (actor) => call('GET', actorPath(actor)),
+    // One page: {items, next, counts, asOf}. Only values the server handed out (next, asOf) go back to it.
+    list: (actor, { filter = 'all', limit, cursor, createdAfter } = {}) => {
+      const query = new URLSearchParams();
+      if (!LIST_FILTERS.includes(filter)) throw new ApiError(0, 'QUERY_NOT_ALLOWED');
+      query.set('filter', filter);
+      if (limit !== undefined) {
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ApiError(0, 'QUERY_NOT_ALLOWED');
+        query.set('limit', String(limit));
+      }
+      if (cursor !== undefined && cursor !== null) {
+        if (typeof cursor !== 'string' || !CURSOR.test(cursor)) throw new ApiError(0, 'QUERY_NOT_ALLOWED');
+        query.set('cursor', cursor);
+      }
+      if (createdAfter !== undefined) {
+        if (typeof createdAfter !== 'string' || !INSTANT.test(createdAfter)) throw new ApiError(0, 'QUERY_NOT_ALLOWED');
+        query.set('createdAfter', createdAfter);
+      }
+      return call('GET', actorPath(actor, `?${query}`));
+    },
     read: (actor, taskKey) => call('GET', taskPath(actor, taskKey)),
     claim: (actor, taskKey) => call('POST', taskPath(actor, taskKey, '/claim')),
     release: (actor, taskKey) => call('POST', taskPath(actor, taskKey, '/release')),

@@ -61,6 +61,49 @@ class TaskInboxTest {
     }
 
     @Test
+    void pagesFollowTheListOrderWithoutOverlapAndCountEveryFilter() {
+        for (long k = 50; k < 55; k++) {
+            engine.add(k, LIB, "Task_AnalystReview", k == 52 ? "ayse.analyst" : null, k * 10, "cmp-tr-onboarding-l1");
+        }
+        List<Long> seen = new ArrayList<>();
+        String cursor = null;
+        do {
+            TaskPage page = inbox.page(Actor.COMPLIANCE_ANALYST, ANALYST, TaskQuery.of("all", "2", cursor, null));
+            assertThat(page.counts()).isEqualTo(new TaskPage.Counts(1, 5, 6));
+            assertThat(page.items()).hasSizeLessThanOrEqualTo(2);
+            page.items().forEach(v -> seen.add(v.taskKey()));
+            cursor = page.next();
+        } while (cursor != null);
+
+        assertThat(seen).containsExactlyElementsOf(
+            inbox.list(Actor.COMPLIANCE_ANALYST, ANALYST).stream().map(TaskView::taskKey).toList());
+        assertThat(inbox.page(Actor.COMPLIANCE_ANALYST, ANALYST, TaskQuery.of("mine", null, null, null)).items())
+            .extracting(TaskView::taskKey).containsExactly(52L);
+        assertThat(inbox.page(Actor.COMPLIANCE_ANALYST, ANALYST, TaskQuery.of("open", null, null, null)).next()).isNull();
+    }
+
+    @Test
+    void onlyTasksCreatedAfterTheGivenTimeAreCountedForTheNewTaskNotice() {
+        engine.add(60, LIB, "Task_AnalystReview", null, 600, "cmp-tr-onboarding-l1");
+
+        // FakeUserTasks creates task k at 10:00:00 plus k seconds.
+        TaskPage page = inbox.page(Actor.COMPLIANCE_ANALYST, ANALYST, TaskQuery.of("all", "1", null, "2026-10-18T10:00:30Z"));
+
+        assertThat(page.counts().all()).isEqualTo(1);
+        assertThat(page.items()).extracting(TaskView::taskKey).containsExactly(60L);
+    }
+
+    @Test
+    void aMalformedListQueryIsRefusedBeforeTheEngineIsAsked() {
+        engine.down = true;
+        for (String[] q : new String[][] {
+            {"other", null, null, null}, {"all", "0", null, null}, {"all", "101", null, null}, {"all", "-1", null, null},
+            {"all", null, "not a cursor", null}, {"all", null, "Zm9v", null}, {"all", null, null, "yesterday"}}) {
+            assertRefused(() -> TaskQuery.of(q[0], q[1], q[2], q[3]), Reason.QUERY_NOT_ALLOWED);
+        }
+    }
+
+    @Test
     void anActorTheUserDoesNotHoldIsRefused() {
         assertRefused(() -> inbox.list(Actor.COMPLIANCE_SENIOR, ANALYST), Reason.NOT_YOUR_ACTOR);
         assertThat(inbox.actorsOf(ANALYST)).containsExactly(Actor.COMPLIANCE_ANALYST);
@@ -183,6 +226,41 @@ class TaskInboxTest {
 
         assertRefused(() -> inbox.decide(Actor.COMPLIANCE_SENIOR, BOTH, 31, Map.of("decision", "CLEAR", "reason", "OTHER")), Reason.FOUR_EYES_REQUIRED);
         assertThat(engine.completions).doesNotContainKey(31L);
+    }
+
+    @Test
+    void aMakerTaskRecordedUnderTheFormerNameStillBlocksTheChecker() {
+        // DevSecOps on 48172f7: the assignee switched from preferred_username to sub; a maker task claimed before
+        // the switch carries the old name and must still count as the same person.
+        StaffUser renamed = new StaffUser("5d3f9a52-8f0c-4a51-9b1e-2f1a7c3e6d40",
+            Set.of("cmp-tr-onboarding-l1", "cmp-tr-compliance-officer"), Set.of("deniz.both"));
+        engine.add(40, LIB, "Task_AnalystReview", "deniz.both", 4000, "cmp-tr-onboarding-l1");
+        engine.expire(40);
+        engine.add(41, LIB, "Task_SeniorReview", null, 4000, "cmp-tr-compliance-officer");
+
+        assertThat(inbox.read(Actor.COMPLIANCE_SENIOR, renamed, 41).fourEyesBlocked()).isTrue();
+        assertRefused(() -> inbox.claim(Actor.COMPLIANCE_SENIOR, renamed, 41), Reason.FOUR_EYES_REQUIRED);
+        assertThat(inbox.claim(Actor.COMPLIANCE_SENIOR, OFFICER, 41).fourEyesBlocked()).isFalse();
+    }
+
+    @Test
+    void aClaimThatWentThroughIsAnsweredAsMineWhenTheReadAfterItFails() {
+        engine.downAfterAssign = true;
+
+        TaskView view = inbox.claim(Actor.COMPLIANCE_ANALYST, ANALYST, 1);
+
+        assertThat(view.assignment()).isEqualTo(TaskView.Assignment.MINE);
+        assertThat(view.reference()).isNull();
+        assertThat(engine.writes).containsExactly("assign 1 ayse.analyst");
+        assertRefused(() -> inbox.read(Actor.COMPLIANCE_ANALYST, ANALYST, 1), Reason.ENGINE_UNAVAILABLE);
+    }
+
+    @Test
+    void aTaskThatClosedRightAfterTheClaimIsReportedAsClosedNotAsMine() {
+        engine.closeAfterAssign = true;
+
+        assertRefused(() -> inbox.claim(Actor.COMPLIANCE_ANALYST, ANALYST, 1), Reason.TASK_NOT_FOUND);
+        assertThat(engine.writes).containsExactly("assign 1 ayse.analyst");
     }
 
     @Test

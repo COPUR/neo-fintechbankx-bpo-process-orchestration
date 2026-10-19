@@ -1,6 +1,7 @@
 # Staff task UX: one screen set per human actor
 
-Status: round 3 (coded decision reasons, queue groups from the identity realm, the engine assignee is `sub`; round 2: four eyes shown before deciding, unknown outcomes, confirmations that name the record, filter
+Status: round 4 (paged task lists with server-side filter counts; four eyes also matches a maker task
+recorded under the user's former name; round 3: coded decision reasons, queue groups from the identity realm, the engine assignee is `sub`; round 2: four eyes shown before deciding, unknown outcomes, confirmations that name the record, filter
 counts and a new-task notice, task measures). Built: the controller layer (`services/bpo-process-api`) and the presentation layer
 (`ui/bpo-staff-web`) for the four actors that have user tasks in this repository's models (the screening review
 and the TR FAST payment exception). The other actors below are designed here so their screens follow the same
@@ -12,7 +13,9 @@ pattern when their models arrive.
 |---|---|
 | Camunda holds ids, enums and deadlines only (ADR 0001) | A task shows its type, number, assignment, due date and the owning service's record id. Detail (screening hits, payment data, names) is read in the owning service's own screen, opened from a link. |
 | A user writes the decision and its coded reason, nothing else | The decision form has two radio groups: the decision and a required reason code. Ids are shown as text, never as inputs; there is no free text. The API accepts `{"decision": "...", "reason": "..."}` only and refuses any other field (`BODY_NOT_ALLOWED`) or a code outside the human list (`REASON_NOT_ALLOWED`); it writes only the decision variable and `decisionReason`. |
-| The engine knows staff by an id that never changes | The assignee written to the engine is the token's `sub`, so four eyes survives a rename in the directory; `preferred_username` is only the greeting on screen. Queue groups come from directory groups `fbx-<queue>`, which the token carries as `/staff/fbx-<queue>`; any other group, role groups included, opens no queue. |
+| The engine knows staff by an id that never changes | The assignee written to the engine is the token's `sub`, so four eyes survives a rename in the directory; `preferred_username` is the greeting on screen and, because
+tasks claimed before the switch to `sub` carry it as assignee, it is also matched against the maker task's
+assignee, only ever to refuse. Queue groups come from directory groups `fbx-<queue>`, which the token carries as `/staff/fbx-<queue>`; any other group, role groups included, opens no queue. |
 | Staff calls are DPoP (ADR 0002, user calls through a UI) | Sign-in is OIDC with PKCE; the browser holds a non-extractable key; every call carries a fresh proof. A token copied out of the browser is refused without the key. |
 | Say what is known | When the engine refuses or cannot be reached before the write, the user is told nothing was recorded. When the write went out and the answer was lost (`OUTCOME_UNKNOWN`), the user is told the outcome is unknown; the screen reads the task once to find out and never resends on its own. |
 | Four eyes in the API | Whoever is the recorded assignee of the maker task of a case when it ends, whether they completed it or let its deadline pass, cannot claim or complete its checker task; the detail screen shows the block first. The engine keeps only a task's last assignee, so someone who released the maker task before it ended is not caught: only the separation-of-duties rule requested from identity (`docs/identity-requests.md`) closes that gap. |
@@ -69,9 +72,11 @@ flowchart LR
 **Task list.** A table with a caption, one row per task: task type, task number, assignment (Unassigned, Mine,
 Held by another colleague; never the colleague's name), SLA badge (Overdue, Due within an hour, On track, No due
 date) and due time. Overdue rows come first. Filters: assigned to me (default), unassigned in my queues, all;
-each label carries its count. Claim is offered only on unassigned rows. Refresh is a button. Every minute,
-while the tab is visible, the screen looks for new tasks and says how many arrived in a polite status line with
-an "Update the list" button; the table itself only changes when the user asks, so it never moves under the
+each label carries the server's count for the whole list. The list comes 50 tasks at a time; under the table a
+line says how many of how many are shown, with a "Show more" button that adds the next page and moves focus to
+its first row. Claim is offered only on unassigned rows. Refresh is a button. Every minute, while the tab is
+visible, the screen asks how many tasks were created since the list was read and says so in a polite status line
+with an "Update the list" button; the table itself only changes when the user asks, so it never moves under the
 cursor.
 
 **Task detail.** Heading "<task type> · <number>", a definition list (assignment, due, reference), the hint
@@ -200,6 +205,8 @@ sequenceDiagram
 - Measures: `bpo.staff.task.claims`, `.releases`, `.decisions` (actor, task type, decision, sla `on-time` or
   `late`), `.age` (creation to decision) and `.refusals` (actor, reason) go to Micrometer through the
   `TaskEvents` port; no user id, task key or reference is a tag. Dashboards belong to the observability repo.
-- Paging of long queues comes in the next round (`docs/ux/staff-task-research.md`).
-- The identity realm checks separation of duties at sign-in and password reset only, and an older session can
+- Paging reads the whole visible list from the engine on every page (at most 200 tasks per task type) and cuts
+  it after the cursor, so a queue longer than that per task type is not fully listed; engine-side paging comes
+  when a queue gets that long. The new-task count compares the engine's creation time with the API's clock.
+- The identity realm checks separation of duties at sign-in and password reset only (repository `fintechbankx-platform-identity-iam-keycloak-ldap` at `38b6d73`, `docs/identity/REALM_AS_CODE.md`), and an older session can
   keep refreshing for hours, so the API's own maker/checker refusal stays.

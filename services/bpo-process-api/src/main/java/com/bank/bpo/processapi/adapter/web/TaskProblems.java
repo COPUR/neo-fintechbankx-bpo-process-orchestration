@@ -24,7 +24,7 @@ public class TaskProblems {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ProblemDetail> badUser(IllegalArgumentException e) {
-        // The token's user name is not a plain user name: the token is not one this API serves.
+        // The token's subject (or a former user name) is not a plain id: the token is not one this API serves.
         return problem(HttpStatus.FORBIDDEN, "USER_NOT_ALLOWED");
     }
 
@@ -34,7 +34,7 @@ public class TaskProblems {
             case TASK_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case TASK_CLAIMED_BY_OTHER, TASK_NOT_ASSIGNED_TO_YOU, FOUR_EYES_REQUIRED -> HttpStatus.CONFLICT;
             case DECISION_NOT_ALLOWED, REASON_NOT_ALLOWED -> HttpStatus.UNPROCESSABLE_CONTENT;
-            case BODY_NOT_ALLOWED -> HttpStatus.BAD_REQUEST;
+            case BODY_NOT_ALLOWED, QUERY_NOT_ALLOWED -> HttpStatus.BAD_REQUEST;
             case ENGINE_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case OUTCOME_UNKNOWN -> HttpStatus.GATEWAY_TIMEOUT;
         };

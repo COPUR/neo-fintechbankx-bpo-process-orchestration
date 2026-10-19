@@ -170,8 +170,24 @@ class StaffApiSecurityTest {
         mvc.perform(dpop(get("/api/v1/actors/compliance-analyst/tasks"), "GET",
                 "http://localhost/api/v1/actors/compliance-analyst/tasks", analyst, userKey))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].taskKey").value(1))
-            .andExpect(jsonPath("$[0].assignment").value("MINE"));
+            .andExpect(jsonPath("$.items[0].taskKey").value(1))
+            .andExpect(jsonPath("$.items[0].assignment").value("MINE"))
+            .andExpect(jsonPath("$.counts.mine").value(1))
+            .andExpect(jsonPath("$.next").doesNotExist());
+    }
+
+    @Test
+    void aListQueryIsCoveredByTheProofWithoutItsQueryStringAndAMalformedOneIsRefused() throws Exception {
+        String analyst = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1"));
+        String htu = "http://localhost/api/v1/actors/compliance-analyst/tasks";
+
+        mvc.perform(dpop(get("/api/v1/actors/compliance-analyst/tasks").queryParam("filter", "mine").queryParam("limit", "1"),
+                "GET", htu, analyst, userKey))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1));
+        mvc.perform(dpop(get("/api/v1/actors/compliance-analyst/tasks").queryParam("limit", "1000"), "GET", htu, analyst, userKey))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("QUERY_NOT_ALLOWED"));
     }
 
     @Test

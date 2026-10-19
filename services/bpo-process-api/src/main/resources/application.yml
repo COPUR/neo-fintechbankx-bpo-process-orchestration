@@ -14,7 +14,7 @@ bpo:
       user-claim: sub
       display-claim: preferred_username
       groups-claim: groups
-      # Directory groups cn=fbx-<queue> land at /staff/fbx-<queue> (identity realm, separation of duties).
+      # Directory groups cn=fbx-<queue> land at /staff/fbx-<queue> (identity repo docs/identity/REALM_AS_CODE.md).
       group-prefix: /staff/fbx-
     # Candidate groups the routing DMNs write; a test keeps them equal (models/dmn/cmp/cmp-review-routing.dmn).
     queues:

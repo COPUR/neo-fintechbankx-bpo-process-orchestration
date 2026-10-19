@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { caseLink, decisionOptions, referenceLink, detailState, errorMessage, filterCounts, filterTasks, newTaskCount, reasonOptions, slaState, taskRows, unknownOutcomeMessage } from '../src/view-model.js';
+import { caseLink, decisionOptions, referenceLink, detailState, errorMessage, filterCounts, filterTasks, reasonOptions, slaState, taskRows, unknownOutcomeMessage } from '../src/view-model.js';
 
 const NOW = Date.parse('2026-10-18T12:00:00Z');
 const task = (key, assignment, dueAt, taskType = 'Task_AnalystReview') => ({ taskKey: key, assignment, dueAt, taskType });
@@ -80,13 +80,10 @@ test('after an unknown outcome the single re-read says what happened', () => {
   assert.equal(unknownOutcomeMessage({ code: 'OUTCOME_UNKNOWN' }), 'outcome.unreachable');
 });
 
-test('filter labels count their tasks and a poll only counts what is new', () => {
-  const tasks = [{ taskKey: 1, assignment: 'MINE' }, { taskKey: 2, assignment: 'UNASSIGNED' }, { taskKey: 3, assignment: 'OTHER' }];
-  assert.deepEqual(filterCounts(tasks), { mine: 1, open: 1, all: 3 });
-  assert.deepEqual(filterCounts([]), { mine: 0, open: 0, all: 0 });
-  // Task 1 closed, task 4 arrived: one new, and a closed task is not counted as new.
-  assert.equal(newTaskCount(tasks, [{ taskKey: '2' }, { taskKey: 3 }, { taskKey: 4 }]), 1);
-  assert.equal(newTaskCount(tasks, tasks), 0);
+test('filter labels show the server totals and never anything but a count', () => {
+  assert.deepEqual(filterCounts({ mine: 1, open: 5, all: 6 }), { mine: 1, open: 5, all: 6 });
+  assert.deepEqual(filterCounts({ mine: '<b>', open: -1, all: 1.5 }), { mine: 0, open: 0, all: 0 });
+  assert.deepEqual(filterCounts(undefined), { mine: 0, open: 0, all: 0 });
 });
 
 test('the case link only carries a plain id into an https template', () => {

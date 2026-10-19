@@ -5,6 +5,7 @@ import { MESSAGES, LANGUAGES, t, formatDateTime } from '../src/i18n.js';
 import { ACTORS } from '../src/api.js';
 
 // The task types the API serves, read from its catalogue so the two layers cannot drift apart.
+const refusals = readFileSync(new URL('../../../services/bpo-process-api/src/main/java/com/bank/bpo/processapi/domain/TaskRefusal.java', import.meta.url), 'utf8');
 const catalogue = readFileSync(new URL('../../../services/bpo-process-api/src/main/java/com/bank/bpo/processapi/domain/TaskTypes.java', import.meta.url), 'utf8');
 const HUMAN_REASONS = catalogue.match(/HUMAN_REASONS = List\.of\(([^)]*)\)/)[1].match(/"(\w+)"/g).map((r) => r.slice(1, -1));
 const TASK_TYPES = [...catalogue.matchAll(/new TaskType\(Actor\.(\w+),\s*"[^"]+", "(Task_\w+)", "\w+", List\.of\(([^)]*)\),\s*REASON, HUMAN_REASONS, (?:null|"\w+"), "(\w+)"\)/g)]
@@ -67,11 +68,14 @@ test('every label the screens build from server values exists in both languages'
     // Every refusal code bpo-process-api returns (TaskRefusal.Reason), plus the client's own.
     'error.NOT_YOUR_ACTOR', 'error.TASK_NOT_FOUND', 'error.TASK_CLAIMED_BY_OTHER', 'error.TASK_NOT_ASSIGNED_TO_YOU',
     'error.DECISION_NOT_ALLOWED', 'error.BODY_NOT_ALLOWED', 'error.FOUR_EYES_REQUIRED', 'error.ENGINE_UNAVAILABLE',
-    'error.OUTCOME_UNKNOWN', 'error.REASON_NOT_ALLOWED',
+    'error.OUTCOME_UNKNOWN', 'error.REASON_NOT_ALLOWED', 'error.QUERY_NOT_ALLOWED',
     'error.SESSION', 'error.UNKNOWN',
     'outcome.closed', 'outcome.notRecorded', 'outcome.stillOpen', 'outcome.unreachable',
   ];
   for (const lang of LANGUAGES) for (const key of dynamic) assert.ok(key in MESSAGES[lang], `${lang} ${key}`);
+  const reasons = refusals.slice(refusals.indexOf('enum Reason')).split('}')[0].match(/^\s+([A-Z_]+),?$/gm).map((r) => r.trim().replace(',', ''));
+  assert.ok(reasons.length >= 11);
+  for (const reason of reasons) assert.ok(dynamic.includes(`error.${reason}`), reason);
 });
 
 test('dates use the language locale', () => {
