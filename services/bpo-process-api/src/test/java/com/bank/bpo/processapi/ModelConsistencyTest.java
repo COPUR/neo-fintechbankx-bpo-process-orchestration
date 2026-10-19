@@ -45,12 +45,32 @@ class ModelConsistencyTest {
                     assertThat(type).as("user task %s/%s has no task type", process.group(1), task.group(1)).isNotNull();
                     assertThat(type.decisions()).as("decisions of %s", task.group(1))
                         .containsExactlyElementsOf(formValues(task.group(2), type.decisionVariable()));
+                    assertThat(type.reasons()).as("reasons of %s", task.group(1))
+                        .containsExactlyElementsOf(formValues(task.group(2), type.reasonVariable()));
                     found.add(process.group(1) + "/" + task.group(1));
                 }
             }
         }
         assertThat(found).containsExactlyInAnyOrderElementsOf(
             TaskTypes.all().stream().map(t -> t.processDefinitionId() + "/" + t.elementId()).toList());
+    }
+
+    @Test
+    void theReasonsOfferedToPeopleAreTheDictionarysCodesWithoutTheSystemOnlyOnes() throws IOException {
+        String dictionary = Files.readString(MODELS.resolve("dictionary/variables.yaml"));
+        Matcher entry = Pattern.compile("\\n\\s+decisionReason: \\{[^\\n]*?values: \\[([^\\]]*)\\][^\\n]*?system_only: \\[([^\\]]*)\\]")
+            .matcher(dictionary);
+        assertThat(entry.find()).as("decisionReason in the variable dictionary").isTrue();
+        List<String> human = new ArrayList<>(split(entry.group(1)));
+        human.removeAll(split(entry.group(2)));
+        for (TaskType type : TaskTypes.all()) {
+            assertThat(type.reasonVariable()).isEqualTo("decisionReason");
+            assertThat(type.reasons()).as("reasons of %s", type.elementId()).containsExactlyElementsOf(human);
+        }
+    }
+
+    private static List<String> split(String list) {
+        return Stream.of(list.split(",")).map(String::trim).filter(x -> !x.isEmpty()).toList();
     }
 
     @Test

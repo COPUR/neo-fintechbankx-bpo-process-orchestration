@@ -5,12 +5,12 @@ import { createApi, ApiError } from './api.js';
 import { authorizeUrl, createPkce, exchangeCode, jwkThumbprint } from './auth.js';
 import { createDpopKey } from './dpop.js';
 import { LANGUAGES, t } from './i18n.js';
-import { errorMessage, newTaskCount, unknownOutcomeMessage } from './view-model.js';
+import { errorMessage, filterCounts, unknownOutcomeMessage } from './view-model.js';
 import { renderActorNav, renderDetail, renderList } from './views.js';
 import { el, clear } from './dom.js';
 import { forgetKey, loadOrCreateKey } from './key-store.js';
 
-const state = { lang: 'tr', actors: [], actor: null, filter: 'mine', tasks: [], poll: null };
+const state = { lang: 'tr', actors: [], actor: null, filter: 'mine', tasks: [], next: null, counts: null, asOf: null, poll: null };
 const POLL_MS = 60 * 1000;
 const $ = (id) => document.getElementById(id);
 
@@ -56,18 +56,42 @@ function stopPolling() {
   state.poll = null;
 }
 
-// Every minute, while the tab is visible, look for new tasks and say how many; the table is redrawn only when
-// the user asks, so a row never moves under the pointer. A failed poll stays silent; the next one tries again.
+// Every minute, while the tab is visible, ask how many tasks arrived since the list was read (the server's
+// asOf) and say so; the table is redrawn only when the user asks, so a row never moves under the pointer. A
+// failed poll stays silent; the next one tries again.
 function startPolling(api, showNewTasks) {
   stopPolling();
-  const actor = state.actor;
+  const { actor, asOf } = state;
+  if (typeof asOf !== 'string') return;
   state.poll = setInterval(async () => {
     if (document.visibilityState !== 'visible' || state.actor !== actor) return;
     try {
-      const fresh = await api.list(actor);
-      if (state.actor === actor && state.poll) showNewTasks(newTaskCount(state.tasks, fresh));
+      const fresh = await api.list(actor, { filter: 'all', limit: 1, createdAfter: asOf });
+      if (state.actor === actor && state.poll) showNewTasks(filterCounts(fresh?.counts).all);
     } catch { /* shown on the next user action */ }
   }, POLL_MS);
+}
+
+function keepPage(page, append) {
+  const items = Array.isArray(page?.items) ? page.items : [];
+  state.tasks = append ? state.tasks.concat(items) : items;
+  state.next = typeof page?.next === 'string' ? page.next : null;
+  state.counts = page?.counts ?? null;
+  if (!append) state.asOf = typeof page?.asOf === 'string' ? page.asOf : null;
+  return items;
+}
+
+function drawList(api, config, focusKey) {
+  const showNewTasks = renderList($('main'), {
+    lang: state.lang, actor: state.actor, tasks: state.tasks, counts: state.counts, hasMore: state.next !== null,
+    filter: state.filter, focusKey,
+    onFilter: (f) => { state.filter = f; showList(api, config); },
+    onRefresh: () => showList(api, config),
+    onMore: () => showMore(api, config),
+    onOpen: (key) => showDetail(api, config, key),
+    onClaim: async (key) => { if (await guarded(() => api.claim(state.actor, key), 'status.claimed')) showDetail(api, config, key); },
+  });
+  startPolling(api, showNewTasks);
 }
 
 // {@code done} is the status of the action that led here; it is announced once the list is in, so the
@@ -75,17 +99,20 @@ function startPolling(api, showNewTasks) {
 async function showList(api, config, done) {
   stopPolling();
   announce(t(state.lang, 'status.loading'));
-  const tasks = await guarded(() => api.list(state.actor), done);
-  if (tasks === undefined) return;
-  state.tasks = tasks;
-  const showNewTasks = renderList($('main'), {
-    lang: state.lang, actor: state.actor, tasks, filter: state.filter,
-    onFilter: (f) => { state.filter = f; showList(api, config); },
-    onRefresh: () => showList(api, config),
-    onOpen: (key) => showDetail(api, config, key),
-    onClaim: async (key) => { if (await guarded(() => api.claim(state.actor, key), 'status.claimed')) showDetail(api, config, key); },
-  });
-  startPolling(api, showNewTasks);
+  const page = await guarded(() => api.list(state.actor, { filter: state.filter }), done);
+  if (page === undefined) return;
+  keepPage(page, false);
+  drawList(api, config);
+}
+
+// The next page is added under the rows already shown; the new-task check keeps the first page's asOf.
+async function showMore(api, config) {
+  const { actor, filter, next } = state;
+  if (next === null) return;
+  const page = await guarded(() => api.list(actor, { filter, cursor: next }));
+  if (page === undefined || state.actor !== actor || state.filter !== filter) return;
+  const added = keepPage(page, true);
+  drawList(api, config, added[0]?.taskKey);
 }
 
 // A decision whose answer was lost may or may not be recorded. Read the task once to tell which, show what
@@ -114,9 +141,9 @@ async function showDetail(api, config, key) {
       const released = await guarded(() => api.release(state.actor, key).then(() => true));
       showList(api, config, released ? 'status.released' : undefined);
     },
-    onDecide: async (decision) => {
+    onDecide: async (decision, reason) => {
       try {
-        await api.decide(state.actor, key, decision);
+        await api.decide(state.actor, key, decision, reason);
       } catch (e) {
         if (codeOf(e) === 'OUTCOME_UNKNOWN') return afterUnknownOutcome(api, config, key);
         return failed(e);
@@ -164,7 +191,8 @@ async function main() {
 
   const me = await guarded(() => api.me());
   if (!me) return;
-  $('user').textContent = t(state.lang, 'app.signedInAs', { user: me.user });
+  // The API sends a user name only when the token carries a plain one.
+  $('user').textContent = typeof me.user === 'string' ? t(state.lang, 'app.signedInAs', { user: me.user }) : t(state.lang, 'app.signedIn');
   state.actors = me.actors;
   $('language').addEventListener('change', (e) => {
     state.lang = e.target.value;

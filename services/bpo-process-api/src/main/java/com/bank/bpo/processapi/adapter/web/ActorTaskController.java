@@ -1,10 +1,11 @@
 package com.bank.bpo.processapi.adapter.web;
 
 import com.bank.bpo.processapi.application.TaskInbox;
+import com.bank.bpo.processapi.application.TaskPage;
+import com.bank.bpo.processapi.application.TaskQuery;
 import com.bank.bpo.processapi.application.TaskView;
 import com.bank.bpo.processapi.domain.Actor;
 import com.bank.bpo.processapi.domain.TaskRefusal;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import org.springframework.http.ResponseEntity;
@@ -13,11 +14,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * The task endpoints every actor has, under {@code /api/v1/actors/<actor>/tasks}. Each actor gets its own
  * controller so its routes, its screens and its authorization stay separate; the rules live in
- * {@link TaskInbox}. The decision body is {@code {"decision": "..."}} and nothing else.
+ * {@link TaskInbox}. Lists are paged; the decision body is {@code {"decision": "...", "reason": "..."}} and nothing
+ * else.
  */
 abstract class ActorTaskController {
 
@@ -33,9 +36,14 @@ abstract class ActorTaskController {
 
     protected abstract Actor actor();
 
+    /** A page of tasks: {@code ?filter=mine|open|all&limit=1..100&cursor=<next>&createdAfter=<asOf>}. */
     @GetMapping("/tasks")
-    public List<TaskView> list(Authentication authentication) {
-        return inbox.list(actor(), users.from(authentication));
+    public TaskPage list(Authentication authentication,
+                         @RequestParam(required = false) String filter,
+                         @RequestParam(required = false) String limit,
+                         @RequestParam(required = false) String cursor,
+                         @RequestParam(required = false) String createdAfter) {
+        return inbox.page(actor(), users.from(authentication), TaskQuery.of(filter, limit, cursor, createdAfter));
     }
 
     @GetMapping("/tasks/{taskKey}")

@@ -14,14 +14,18 @@ public final class TaskRefusal extends RuntimeException {
         TASK_NOT_ASSIGNED_TO_YOU,
         /** The decision is not one the task's form offers. */
         DECISION_NOT_ALLOWED,
-        /** The body carried anything but the decision. */
+        /** The body carried anything but the decision and its reason code. */
         BODY_NOT_ALLOWED,
-        /** The user completed the maker task of this case; a second person must decide. */
+        /** The user is the last assignee of this case's maker task; a second person must claim and decide. */
         FOUR_EYES_REQUIRED,
         /** The engine could not be reached or read; no write was sent. */
         ENGINE_UNAVAILABLE,
         /** A write was sent but its answer was lost or was a server error: it may have been applied. */
-        OUTCOME_UNKNOWN
+        OUTCOME_UNKNOWN,
+        /** The reason is not one of the task type's human codes. */
+        REASON_NOT_ALLOWED,
+        /** A list query parameter (filter, limit, cursor, createdAfter) is malformed or out of range. */
+        QUERY_NOT_ALLOWED
     }
 
     private final Reason reason;

@@ -12,7 +12,7 @@ it; the identity owner adds the clients there. Authentication of worker calls is
 | `svc-bpo-event-bridge` | service, client credentials | the event bridge (later) | engine: message publish only. It is the only client allowed to publish `Msg_KycCompleted`, `Msg_SchemeStatusReported` and every later message |
 | `svc-bpo-ci-deployer` | service, client credentials | model deployment from `main` (later) | engine: deployment only |
 | `svc-bpo-process` | service, client credentials | `bpo-process-api` | engine: user task read, assign, unassign and complete on `lib-screening-review` and `pay-instant-exception` (process start later); also the audience staff tokens carry |
-| `bpo-staff-web` | public, authorization code with PKCE (S256), DPoP-bound tokens required | the staff web (`ui/bpo-staff-web`) | scope that adds `svc-bpo-process` to `aud`; `preferred_username` and a `groups` claim with the queue groups below; redirect URI of the staff web host |
+| `bpo-staff-web` | public, authorization code with PKCE (S256), DPoP-bound tokens required | the staff web (`ui/bpo-staff-web`) | scope that adds `svc-bpo-process` to `aud`; `sub`, `preferred_username` and a `groups` claim with full group paths (queues as `/staff/fbx-<queue>`); redirect URI of the staff web host |
 
 Provider audiences for `svc-bpo-worker-onboarding` (the existing client ids, so no new audience is created):
 
@@ -24,10 +24,19 @@ Provider audiences for `svc-bpo-worker-onboarding` (the existing client ids, so 
 | psg-tr | none yet | offerKolayAdresAlias | no client exists; created with the gateway |
 | ntf | none yet | sendNotification | no client exists; created with the service |
 
+Queue groups for staff: each queue `<queue>` below is a directory group `cn=fbx-<queue>` that the token carries
+as `/staff/fbx-<queue>` (the ten queue groups and the staff browser flow: repository `fintechbankx-platform-identity-iam-keycloak-ldap` at `38b6d73`, `docs/identity/REALM_AS_CODE.md`, sections "Groups" and
+"Who signs in to staff web") (`bpo-process-api` drops the `/staff/fbx-` prefix and ignores every other group). Queue
+users also hold a staff role group and sign in through the realm's staff browser flow. The engine assignee is
+the token's `sub`, which never changes; `preferred_username` follows the directory and is shown. Tasks claimed
+before the assignee was `sub` carry the user name, so four eyes also refuses a user whose current
+`preferred_username` is the maker task's assignee; that check only refuses, never grants.
+
 Separation of duties for staff (requested): no account holds a maker queue group and its checker queue group
-of the same process at once (`cmp-*-onboarding-l1` or `cmp-review-l1` with `cmp-*-mlro`,
-`cmp-tr-compliance-officer` or `cmp-review-l2`; `pay-tr-fast-ops` or `pay-ops-l1` with `pay-tr-fast-supervisor`
-or `pay-ops-l2`), and `preferred_username` cannot be changed by the user. `bpo-process-api` refuses the checker
+of the same process at once (`fbx-cmp-*-onboarding-l1` or `fbx-cmp-review-l1` with `fbx-cmp-*-mlro`,
+`fbx-cmp-tr-compliance-officer` or `fbx-cmp-review-l2`; `fbx-pay-tr-fast-ops` or `fbx-pay-ops-l1` with
+`fbx-pay-tr-fast-supervisor` or `fbx-pay-ops-l2`). The realm checks this at sign-in and reset only (same file, "Separation
+of duties for bpo staff queues" and gap 5: a refresh runs no flow), so the API keeps its own refusal. `bpo-process-api` refuses the checker
 task to whoever is the maker task's last recorded assignee, but the engine keeps no earlier assignees, so someone
 who released the maker task before it ended is only stopped by this rule.
 

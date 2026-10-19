@@ -14,8 +14,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("bpo.process-api")
 public record ProcessApiProperties(Token token, Map<String, List<String>> queues, Engine engine) {
 
-    /** The staff access token: who issues it, where its keys are, its audience and which claims name the user. */
-    public record Token(String issuerUri, URI jwkSetUri, String audience, String userClaim, String groupsClaim) {
+    /**
+     * The staff access token: who issues it, where its keys are, its audience, which claims name the user (the
+     * immutable id the engine records, and a display name) and where the queue groups sit in the groups claim.
+     */
+    public record Token(String issuerUri, URI jwkSetUri, String audience, String userClaim, String displayClaim,
+                        String groupsClaim, String groupPrefix) {
     }
 
     /** The Orchestration Cluster REST API and the API's own client-credentials client for it. */

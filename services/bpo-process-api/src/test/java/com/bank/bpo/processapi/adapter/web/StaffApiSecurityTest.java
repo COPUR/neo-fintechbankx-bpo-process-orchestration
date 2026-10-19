@@ -45,7 +45,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /**
  * The whole filter chain with real tokens and real DPoP proofs: only a DPoP-bound staff token with a matching
  * proof reaches a controller, each actor's routes need that actor's queue group, and the decision body is the
- * decision alone.
+ * decision and its coded reason alone.
  */
 @SpringBootTest(properties = {
     "bpo.process-api.token.issuer-uri=https://keycloak.test/realms/staff",
@@ -58,6 +58,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class StaffApiSecurityTest {
 
     private static final String ISSUER = "https://keycloak.test/realms/staff";
+    /** The token's sub: the engine records it as assignee, so a rename in the directory changes nothing. */
+    private static final String USER_ID = "5d3f9a52-8f0c-4a51-9b1e-2f1a7c3e6d40";
     private static final RSAKey ISSUER_KEY = rsa();
 
     @TestConfiguration
@@ -92,13 +94,13 @@ class StaffApiSecurityTest {
         fake.tasks.clear();
         fake.completions.clear();
         fake.writes.clear();
-        fake.add(1, "lib-screening-review", "Task_AnalystReview", "ayse.analyst", 100, "cmp-tr-onboarding-l1");
+        fake.add(1, "lib-screening-review", "Task_AnalystReview", USER_ID, 100, "cmp-tr-onboarding-l1");
         userKey = new ECKeyGenerator(Curve.P_256).keyID(UUID.randomUUID().toString()).generate();
     }
 
     @Test
     void aDpopBoundTokenWithAMatchingProofIsServed() throws Exception {
-        String token = token(userKey, "svc-bpo-process", List.of("/cmp-tr-onboarding-l1"));
+        String token = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
 
         mvc.perform(dpop(get("/api/v1/me"), "GET", "http://localhost/api/v1/me", token, userKey))
             .andExpect(status().isOk())
@@ -107,19 +109,35 @@ class StaffApiSecurityTest {
     }
 
     @Test
+    void onlyGroupsUnderTheQueuePrefixNameQueuesAndTheEngineSeesTheSubject() throws Exception {
+        // A group without the prefix, even one spelled like a queue, opens no queue; role groups are ignored.
+        String unprefixed = token(userKey, "svc-bpo-process", List.of("/cmp-tr-onboarding-l1", "cmp-tr-onboarding-l1", "/staff/banker"));
+        mvc.perform(dpop(get("/api/v1/me"), "GET", "http://localhost/api/v1/me", unprefixed, userKey))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.actors").isEmpty());
+
+        fake.add(2, "lib-screening-review", "Task_AnalystReview", null, 200, "cmp-tr-onboarding-l1");
+        String analyst = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1"));
+        String url = "http://localhost/api/v1/actors/compliance-analyst/tasks/2/claim";
+        mvc.perform(dpop(post("/api/v1/actors/compliance-analyst/tasks/2/claim"), "POST", url, analyst, userKey))
+            .andExpect(status().isOk());
+        assertThat(fake.writes).containsExactly("assign 2 " + USER_ID);
+    }
+
+    @Test
     void theSameTokenAsAPlainBearerIsRefused() throws Exception {
-        String token = token(userKey, "svc-bpo-process", List.of("cmp-tr-onboarding-l1"));
+        String token = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
 
         mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + token)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/me")).andExpect(status().isUnauthorized());
         // Two guards refuse an unbound bearer: the API reads no bearer token, and the token validator wants cnf.jkt.
-        String unbound = token(null, "svc-bpo-process", List.of("cmp-tr-onboarding-l1"));
+        String unbound = token(null, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
         mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + unbound)).andExpect(status().isUnauthorized());
     }
 
     @Test
     void aProofFromAnotherKeyOrForAnotherUrlIsRefused() throws Exception {
-        String token = token(userKey, "svc-bpo-process", List.of("cmp-tr-onboarding-l1"));
+        String token = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
         ECKey thief = new ECKeyGenerator(Curve.P_256).generate();
 
         mvc.perform(dpop(get("/api/v1/me"), "GET", "http://localhost/api/v1/me", token, thief))
@@ -132,8 +150,8 @@ class StaffApiSecurityTest {
 
     @Test
     void aTokenWithoutKeyBindingOrForAnotherAudienceIsRefused() throws Exception {
-        String unbound = token(null, "svc-bpo-process", List.of("cmp-tr-onboarding-l1"));
-        String otherAudience = token(userKey, "svc-acc-accounts-ledger", List.of("cmp-tr-onboarding-l1"));
+        String unbound = token(null, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
+        String otherAudience = token(userKey, "svc-acc-accounts-ledger", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
 
         mvc.perform(dpop(get("/api/v1/me"), "GET", "http://localhost/api/v1/me", unbound, userKey))
             .andExpect(status().isUnauthorized());
@@ -143,7 +161,7 @@ class StaffApiSecurityTest {
 
     @Test
     void eachActorsRoutesNeedThatActorsQueueGroup() throws Exception {
-        String analyst = token(userKey, "svc-bpo-process", List.of("cmp-tr-onboarding-l1"));
+        String analyst = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
         String url = "http://localhost/api/v1/actors/compliance-senior/tasks";
 
         mvc.perform(dpop(get("/api/v1/actors/compliance-senior/tasks"), "GET", url, analyst, userKey))
@@ -152,13 +170,29 @@ class StaffApiSecurityTest {
         mvc.perform(dpop(get("/api/v1/actors/compliance-analyst/tasks"), "GET",
                 "http://localhost/api/v1/actors/compliance-analyst/tasks", analyst, userKey))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].taskKey").value(1))
-            .andExpect(jsonPath("$[0].assignment").value("MINE"));
+            .andExpect(jsonPath("$.items[0].taskKey").value(1))
+            .andExpect(jsonPath("$.items[0].assignment").value("MINE"))
+            .andExpect(jsonPath("$.counts.mine").value(1))
+            .andExpect(jsonPath("$.next").doesNotExist());
     }
 
     @Test
-    void aDecisionCarryingAnIdIsRefusedAndTheDecisionAloneIsWritten() throws Exception {
-        String analyst = token(userKey, "svc-bpo-process", List.of("cmp-tr-onboarding-l1"));
+    void aListQueryIsCoveredByTheProofWithoutItsQueryStringAndAMalformedOneIsRefused() throws Exception {
+        String analyst = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1"));
+        String htu = "http://localhost/api/v1/actors/compliance-analyst/tasks";
+
+        mvc.perform(dpop(get("/api/v1/actors/compliance-analyst/tasks").queryParam("filter", "mine").queryParam("limit", "1"),
+                "GET", htu, analyst, userKey))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1));
+        mvc.perform(dpop(get("/api/v1/actors/compliance-analyst/tasks").queryParam("limit", "1000"), "GET", htu, analyst, userKey))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("QUERY_NOT_ALLOWED"));
+    }
+
+    @Test
+    void aDecisionCarryingAnIdOrNoCodedReasonIsRefusedAndOnlyDecisionAndReasonAreWritten() throws Exception {
+        String analyst = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
         String url = "http://localhost/api/v1/actors/compliance-analyst/tasks/1/decision";
 
         mvc.perform(dpop(post("/api/v1/actors/compliance-analyst/tasks/1/decision"), "POST", url, analyst, userKey)
@@ -172,13 +206,24 @@ class StaffApiSecurityTest {
 
         mvc.perform(dpop(post("/api/v1/actors/compliance-analyst/tasks/1/decision"), "POST", url, analyst, userKey)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"CLEAR\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BODY_NOT_ALLOWED"));
+        mvc.perform(dpop(post("/api/v1/actors/compliance-analyst/tasks/1/decision"), "POST", url, analyst, userKey)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"CLEAR\",\"reason\":\"SLA_EXPIRED\"}"))
+            .andExpect(status().isUnprocessableContent())
+            .andExpect(jsonPath("$.code").value("REASON_NOT_ALLOWED"));
+        assertThat(fake.completions).isEmpty();
+
+        mvc.perform(dpop(post("/api/v1/actors/compliance-analyst/tasks/1/decision"), "POST", url, analyst, userKey)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"CLEAR\",\"reason\":\"OTHER\"}"))
             .andExpect(status().isNoContent());
-        assertThat(fake.completions.get(1L)).containsExactly(Map.entry("reviewDecision", "CLEAR"));
+        assertThat(fake.completions.get(1L))
+            .containsOnly(Map.entry("reviewDecision", "CLEAR"), Map.entry("decisionReason", "OTHER"));
     }
 
     @Test
     void aMalformedTaskKeyLooksLikeNoTask() throws Exception {
-        String analyst = token(userKey, "svc-bpo-process", List.of("cmp-tr-onboarding-l1"));
+        String analyst = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
 
         mvc.perform(dpop(get("/api/v1/actors/compliance-analyst/tasks/1e3"), "GET",
                 "http://localhost/api/v1/actors/compliance-analyst/tasks/1e3", analyst, userKey))
@@ -188,7 +233,7 @@ class StaffApiSecurityTest {
 
     @Test
     void nothingOutsideTheApiIsServed() throws Exception {
-        String token = token(userKey, "svc-bpo-process", List.of("cmp-tr-onboarding-l1"));
+        String token = token(userKey, "svc-bpo-process", List.of("/staff/fbx-cmp-tr-onboarding-l1", "/staff/banker"));
 
         mvc.perform(dpop(get("/actuator/env"), "GET", "http://localhost/actuator/env", token, userKey))
             .andExpect(result -> assertThat(result.getResponse().getStatus()).isIn(401, 403));
@@ -208,7 +253,7 @@ class StaffApiSecurityTest {
 
     private static String token(ECKey boundTo, String audience, List<String> groups) throws Exception {
         JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder().issuer(ISSUER).audience(audience)
-            .subject(UUID.randomUUID().toString()).claim("preferred_username", "ayse.analyst").claim("groups", groups)
+            .subject(USER_ID).claim("preferred_username", "ayse.analyst").claim("groups", groups)
             .issueTime(new Date()).expirationTime(new Date(System.currentTimeMillis() + 300_000));
         if (boundTo != null) {
             claims.claim("cnf", Map.of("jkt", boundTo.computeThumbprint().toString()));

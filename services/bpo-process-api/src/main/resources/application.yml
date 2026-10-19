@@ -10,8 +10,12 @@ bpo:
       issuer-uri: ${BPO_STAFF_ISSUER_URI}
       jwk-set-uri: ${BPO_STAFF_JWK_SET_URI}
       audience: svc-bpo-process
-      user-claim: preferred_username
+      # sub never changes, so the engine's assignee (and four eyes) survives a rename in the directory.
+      user-claim: sub
+      display-claim: preferred_username
       groups-claim: groups
+      # Directory groups cn=fbx-<queue> land at /staff/fbx-<queue> (identity repo docs/identity/REALM_AS_CODE.md).
+      group-prefix: /staff/fbx-
     # Candidate groups the routing DMNs write; a test keeps them equal (models/dmn/cmp/cmp-review-routing.dmn).
     queues:
       compliance-analyst: [cmp-ae-onboarding-l1, cmp-tr-onboarding-l1, cmp-review-l1]

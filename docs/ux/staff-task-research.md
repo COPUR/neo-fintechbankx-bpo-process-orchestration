@@ -72,8 +72,8 @@ already assigned to the user outside the API.
 
 ```
 | Senior review · 2251799813685410                                             |
-| [!] You held the earlier step of this record, so four eyes keeps you from    |
-|     claiming or deciding this task. Another authorised colleague decides it. |
+| [!] You were the last assignee of this record's earlier step, so four eyes   |
+|     keeps you from claiming or deciding this task. Another colleague decides. |
 ```
 
 Unknown outcome (built). The screen reads the task once and shows one of three answers; it never resends.
@@ -87,9 +87,17 @@ Unknown outcome (built). The screen reads the task once and shows one of three a
 |       engine still unreachable -> "The outcome is still unknown. Do not send the decision again."
 ```
 
-Next round: paging for long queues (an opaque cursor and a `{items, next}` response), and a mandatory coded
-reason on each decision, chosen from a fixed list with no free text so no personal data reaches the engine.
+Coded reason (built): required with every decision, chosen from a fixed list with no free text, so no
+personal data reaches the engine.
 
 ```
-| Reason (required): [ Other                         v ]                       |
+| Decision: ( ) Settled at the scheme  (o) Rejected at the scheme  ( ) Escalate |
+| Reason (required): (o) Other                                                 |
+```
+
+Paging (built): 50 tasks a page, filter counts from the server for the whole list.
+
+```
+| ...                                                                          |
+| Showing 50 of 132 tasks.  [Show more]                                        |
 ```

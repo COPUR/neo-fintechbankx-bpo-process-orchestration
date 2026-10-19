@@ -21,6 +21,10 @@ public final class FakeUserTasks implements UserTaskPort {
     public final List<String> writes = new ArrayList<>();
     public final Map<Long, Map<String, String>> completions = new HashMap<>();
     public boolean down;
+    /** The engine stops answering right after the next assign went through. */
+    public boolean downAfterAssign;
+    /** The task's SLA timer fires right after the next assign went through. */
+    public boolean closeAfterAssign;
 
     public EngineTask add(long key, String process, String element, String assignee, long instance, String... groups) {
         EngineTask task = new EngineTask(key, process, element, EngineTask.OPEN, assignee, List.of(groups), instance,
@@ -55,6 +59,10 @@ public final class FakeUserTasks implements UserTaskPort {
         check();
         writes.add("assign " + taskKey + " " + assignee);
         replace(taskKey, assignee, EngineTask.OPEN);
+        down = downAfterAssign;
+        if (closeAfterAssign) {
+            expire(taskKey);
+        }
     }
 
     @Override
