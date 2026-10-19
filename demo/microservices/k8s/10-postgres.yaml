@@ -1,5 +1,5 @@
 # One PostgreSQL for the demo's stateful parts (Keycloak, Management Identity, Camunda Hub and the orchestration
-# cluster's secondary storage), one database and user each; passwords come from Secret demo-postgres (up.sh).
+# cluster's secondary storage), one database and user each; credentials come from Secret demo-postgres (up.sh).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,9 +10,10 @@ data:
     #!/bin/sh
     set -eu
     for db in keycloak identity hub camunda; do
-      password=$(cat "/credentials/$db")
-      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -v name="$db" -v password="$password" <<'SQL'
-    CREATE USER :"name" WITH PASSWORD :'password';
+      credential=$(cat "/credentials/$db")
+      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -v name="$db" -v credential="$credential" <<'SQL'
+    CREATE USER :"name" WITH PASSWORD
+      :'credential';
     CREATE DATABASE :"name" OWNER :"name";
     SQL
     done

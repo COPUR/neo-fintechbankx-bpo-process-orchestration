@@ -40,8 +40,8 @@ random() { openssl rand -hex 24; }
 secret_exists demo-postgres || kubectl -n "$ns" create secret generic demo-postgres \
   --from-literal=postgres="$(random)" --from-literal=keycloak="$(random)" --from-literal=identity="$(random)" \
   --from-literal=hub="$(random)" --from-literal=camunda="$(random)"
-secret_exists demo-keycloak || kubectl -n "$ns" create secret generic demo-keycloak --from-literal=admin-password="$(random)"
-secret_exists demo-presenter || kubectl -n "$ns" create secret generic demo-presenter --from-literal=password="$(openssl rand -hex 12)"
+secret_exists demo-keycloak || kubectl -n "$ns" create secret generic demo-keycloak --from-literal=admin-credential="$(random)"
+secret_exists demo-presenter || kubectl -n "$ns" create secret generic demo-presenter --from-literal=credential="$(openssl rand -hex 12)"
 secret_exists demo-clients || kubectl -n "$ns" create secret generic demo-clients \
   --from-literal=svc-bpo-worker-payments="$(random)" --from-literal=demo-loader="$(random)"
 secret_exists demo-pusher || kubectl -n "$ns" create secret generic demo-pusher \
@@ -108,5 +108,5 @@ Then sign in as "presenter":
   Hub (Web Modeler)  http://localhost:8070
   Identity  http://localhost:8084
 To read the generated password, run
-  kubectl -n $ns get secret demo-presenter -o jsonpath='{.data.password}' | base64 -d; echo
+  kubectl -n $ns get secret demo-presenter -o jsonpath='{.data.credential}' | base64 -d; echo
 MSG

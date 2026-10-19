@@ -56,7 +56,7 @@ spec:
             - {name: KC_HEALTH_ENABLED, value: "true"}
             - {name: KC_BOOTSTRAP_ADMIN_USERNAME, value: kc-admin}
             - name: KC_BOOTSTRAP_ADMIN_PASSWORD
-              valueFrom: {secretKeyRef: {name: demo-keycloak, key: admin-password}}
+              valueFrom: {secretKeyRef: {name: demo-keycloak, key: admin-credential}}
             - {name: JAVA_OPTS_KC_HEAP, value: "-XX:MaxRAMPercentage=70"}
           ports:
             - {name: http, containerPort: 18080}

@@ -68,6 +68,9 @@ Known demo shortcuts:
 open.sh works the same there. Both scripts talk to that one cluster through a private copy of its kubeconfig, so
 switching context in another terminal does not redirect them. A cluster that does not see Docker's images gets the demo image
 through `BPO_DEMO_IMAGE_LOAD`, for example `BPO_DEMO_IMAGE_LOAD="kind load image-archive /dev/stdin"`.
+Docker Desktop can also run Kubernetes in kind mode (a `desktop-control-plane` container); its pods then fail with
+`ErrImageNeverPull`. Load the image into that node with
+`BPO_DEMO_IMAGE_LOAD="docker exec -i desktop-control-plane ctr -n k8s.io images import -"`.
 
 ## Sample data and demo flow
 

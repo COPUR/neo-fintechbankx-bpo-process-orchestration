@@ -347,7 +347,11 @@ spec:
             - {name: BPO_PROVIDER_PAY_URL, value: "https://sim-pay:8443/"}
             - {name: BPO_PROVIDER_NTF_URL, value: "https://sim-ntf:8443/"}
             - {name: BPO_AUTH_TOKEN_URI, value: "https://keycloak:8443/auth/realms/camunda-platform/protocol/openid-connect/token"}
-            - {name: BPO_AUTH_SCOPE, value: "aud-svc-psg-tr aud-svc-acc-accounts-ledger aud-svc-pay-initiation-settlement aud-svc-ntf"}
+            # One token per provider, each scoped to that provider's audience only.
+            - {name: BPO_AUTH_SCOPE_PSG_TR, value: aud-svc-psg-tr}
+            - {name: BPO_AUTH_SCOPE_ACC, value: aud-svc-acc-accounts-ledger}
+            - {name: BPO_AUTH_SCOPE_PAY, value: aud-svc-pay-initiation-settlement}
+            - {name: BPO_AUTH_SCOPE_NTF, value: aud-svc-ntf}
             - name: BPO_AUTH_CLIENT_CREDENTIAL
               valueFrom: {secretKeyRef: {name: demo-clients, key: svc-bpo-worker-payments}}
             - {name: CAMUNDA_CLIENT_MODE, value: self-managed}

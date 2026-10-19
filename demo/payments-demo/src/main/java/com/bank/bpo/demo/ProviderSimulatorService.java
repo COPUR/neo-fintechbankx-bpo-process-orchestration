@@ -159,12 +159,12 @@ final class ProviderSimulatorService {
         byte[] der = Base64.getMimeDecoder().decode(pem.replace(PKCS8_BEGIN, "").replace(PKCS8_END, ""));
         PrivateKey key = KeyFactory.getInstance(((X509Certificate) chain.getFirst()).getPublicKey().getAlgorithm())
             .generatePrivate(new PKCS8EncodedKeySpec(der));
-        char[] transientPassword = UUID.randomUUID().toString().toCharArray();
+        char[] entryProtection = UUID.randomUUID().toString().toCharArray();
         KeyStore store = KeyStore.getInstance("PKCS12");
         store.load(null, null);
-        store.setKeyEntry("server", key, transientPassword, chain.toArray(Certificate[]::new));
+        store.setKeyEntry("server", key, entryProtection, chain.toArray(Certificate[]::new));
         KeyManagerFactory keys = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        keys.init(store, transientPassword);
+        keys.init(store, entryProtection);
         SSLContext context = SSLContext.getInstance("TLSv1.3");
         context.init(keys.getKeyManagers(), null, null);
         return context;

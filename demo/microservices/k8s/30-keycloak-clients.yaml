@@ -1,6 +1,6 @@
 # Adds the demo's service clients to realm camunda-platform once Management Identity has created it:
 #   svc-bpo-worker-payments  client credentials; default audience orchestration-api, optional audiences of the
-#                            four providers (requested per call through BPO_AUTH_SCOPE)
+#                            four providers (one token per provider, BPO_AUTH_SCOPE_<PROVIDER>)
 #   demo-loader              client credentials; audience orchestration-api only
 # Re-running it is safe: existing scopes are kept and existing clients get the current secret. The Keycloak
 # image has bash but no awk or jq, so the script uses bash only.
@@ -78,7 +78,7 @@ spec:
           env:
             - {name: HOME, value: /tmp}
             - name: KC_ADMIN_PASSWORD
-              valueFrom: {secretKeyRef: {name: demo-keycloak, key: admin-password}}
+              valueFrom: {secretKeyRef: {name: demo-keycloak, key: admin-credential}}
             - name: WORKER_SECRET
               valueFrom: {secretKeyRef: {name: demo-clients, key: svc-bpo-worker-payments}}
             - name: LOADER_SECRET

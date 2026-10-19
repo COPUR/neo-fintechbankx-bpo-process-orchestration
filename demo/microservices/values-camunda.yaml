@@ -19,7 +19,7 @@ global:
         adminUser: kc-admin
         secret:
           existingSecret: demo-keycloak
-          existingSecretKey: admin-password
+          existingSecretKey: admin-credential
     auth:
       enabled: true
       type: KEYCLOAK
@@ -54,7 +54,7 @@ identity:
     lastName: Presenter
     secret:
       existingSecret: demo-presenter
-      existingSecretKey: password
+      existingSecretKey: credential
   externalDatabase:
     enabled: true
     host: postgres
