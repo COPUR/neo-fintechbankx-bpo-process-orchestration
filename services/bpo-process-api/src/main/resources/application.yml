@@ -1,0 +1,27 @@
+# Settings come from the environment; nothing here works on its own, so a pod without them does not start.
+spring:
+  application:
+    name: bpo-process-api
+  main:
+    banner-mode: off
+bpo:
+  process-api:
+    token:
+      issuer-uri: ${BPO_STAFF_ISSUER_URI}
+      jwk-set-uri: ${BPO_STAFF_JWK_SET_URI}
+      audience: svc-bpo-process
+      user-claim: preferred_username
+      groups-claim: groups
+    # Candidate groups the routing DMNs write; a test keeps them equal (models/dmn/cmp/cmp-review-routing.dmn).
+    queues:
+      compliance-analyst: [cmp-ae-onboarding-l1, cmp-tr-onboarding-l1, cmp-review-l1]
+      compliance-senior: [cmp-ae-mlro, cmp-tr-compliance-officer, cmp-review-l2]
+      # models/dmn/pay/pay-exception-routing.dmn
+      payments-operations: [pay-tr-fast-ops, pay-ops-l1]
+      payments-supervisor: [pay-tr-fast-supervisor, pay-ops-l2]
+    engine:
+      base-url: ${BPO_ENGINE_REST_URL}
+      token-uri: ${BPO_AUTH_TOKEN_URI}
+      client-id: svc-bpo-process
+      client-credential: ${BPO_AUTH_CLIENT_CREDENTIAL}
+      scope: ${BPO_AUTH_SCOPE}

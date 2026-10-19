@@ -1,0 +1,55 @@
+/* Contrast at least 4.5:1 for text (WCAG 2.2 AA), visible focus on every control, no motion that is not asked
+   for, and status shown by text as well as colour. */
+:root {
+  --bg: #ffffff; --fg: #1b1f24; --muted: #4a5360; --line: #c9ced6; --accent: #0b57d0; --accent-fg: #ffffff;
+  --danger: #a4161a; --warn: #7a4a00; --ok: #1e6b35; --focus: #ffbf47;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 100%; line-height: 1.5;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171b; --fg: #eef1f4; --muted: #b5bcc6; --line: #3a414b; --accent: #8ab4f8; --accent-fg: #0b1220;
+    --danger: #ff8a8a; --warn: #ffcc66; --ok: #7ad694; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+body { margin: 0; background: var(--bg); color: var(--fg); }
+.skip-link { position: absolute; left: -999px; top: 0; padding: .5rem 1rem; background: var(--accent); color: var(--accent-fg); }
+.skip-link:focus { left: 0; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.topbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; padding: .75rem 1rem; border-bottom: 1px solid var(--line); }
+.topbar h1 { font-size: 1.25rem; margin: 0; }
+.session { display: flex; gap: .5rem; align-items: center; color: var(--muted); }
+nav { padding: 0 1rem; border-bottom: 1px solid var(--line); }
+.actor-tabs { display: flex; flex-wrap: wrap; gap: .25rem; list-style: none; margin: 0; padding: .5rem 0; }
+.actor-tabs button[aria-current="page"] { background: var(--accent); color: var(--accent-fg); }
+main { padding: 1rem; max-width: 72rem; }
+button, select, input { font: inherit; }
+button { min-height: 44px; min-width: 44px; padding: .5rem 1rem; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--accent-fg); cursor: pointer; }
+button.secondary, .actor-tabs button { background: transparent; color: var(--accent); }
+button.link { border: 0; background: none; color: var(--accent); text-decoration: underline; padding-left: 0; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.hint, .empty { color: var(--muted); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin: 1rem 0; }
+fieldset { border: 1px solid var(--line); border-radius: 6px; padding: .5rem 1rem; }
+.choice { display: inline-flex; align-items: center; gap: .35rem; margin-right: 1rem; min-height: 44px; }
+.decision .choice { display: flex; }
+table.tasks { width: 100%; border-collapse: collapse; }
+table.tasks caption { text-align: left; font-weight: 600; padding: .5rem 0; }
+table.tasks th, table.tasks td { text-align: left; padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+td.actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.badge { display: inline-block; padding: 0 .5rem; border-radius: 999px; border: 1px solid currentColor; font-size: .875rem; }
+.badge.overdue { color: var(--danger); font-weight: 600; }
+.badge.due-soon { color: var(--warn); }
+.badge.on-track { color: var(--ok); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
+.facts dt { font-weight: 600; }
+.note, .warning { border-left: 4px solid var(--accent); padding: .5rem 1rem; }
+.warning { border-color: var(--warn); }
+.new-tasks:not(:empty) { border-left: 4px solid var(--accent); padding: .5rem 1rem; margin: .5rem 0; }
+.alerts:not(:empty) { margin: 1rem; padding: .75rem 1rem; border: 2px solid var(--danger); color: var(--danger); border-radius: 6px; }
+.buttons { display: flex; gap: .5rem; margin-top: 1rem; }
+.confirm { margin-top: 1rem; padding: 1rem; border: 2px solid var(--warn); border-radius: 6px; }
+.confirm button { margin-right: .5rem; }
+@media (max-width: 40rem) {
+  table.tasks thead { position: absolute; left: -999px; }
+  table.tasks tr { display: block; border-bottom: 1px solid var(--line); padding: .5rem 0; }
+  table.tasks th, table.tasks td { display: block; border: 0; padding: .15rem 0; }
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The ingress sets the full policy (connect-src with the API and realm origins, frame-ancestors 'none'). -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https:; form-action 'self'; base-uri 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>BPO görevleri</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="src/app.js"></script>
+</head>
+<body>
+  <a id="skip-link" class="skip-link" href="#main">Ana içeriğe geç</a>
+  <header class="topbar">
+    <h1 id="app-title">BPO görevleri</h1>
+    <div class="session">
+      <span id="user"></span>
+      <label id="language-label" for="language">Dil</label>
+      <select id="language">
+        <option value="tr">Türkçe</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+  </header>
+  <nav id="actors" aria-labelledby="app-title"></nav>
+  <div id="alerts" class="alerts" role="alert" aria-live="assertive"></div>
+  <div id="status" class="visually-hidden" role="status" aria-live="polite"></div>
+  <main id="main" tabindex="-1"></main>
+</body>
+</html>

@@ -11,7 +11,8 @@ it; the identity owner adds the clients there. Authentication of worker calls is
 | `svc-bpo-worker-payments` | service, client credentials | payments job workers (TR cluster first) | engine: activate and complete jobs of the payments job types only, no process start, no message publish. Providers: one scope per audience (below); its `azp` on each provider's caller allow-list |
 | `svc-bpo-event-bridge` | service, client credentials | the event bridge (later) | engine: message publish only. It is the only client allowed to publish `Msg_KycCompleted`, `Msg_SchemeStatusReported` and every later message |
 | `svc-bpo-ci-deployer` | service, client credentials | model deployment from `main` (later) | engine: deployment only |
-| `svc-bpo-process` | service | `bpo-process-api` (later) | engine: process start and user task permissions |
+| `svc-bpo-process` | service, client credentials | `bpo-process-api` | engine: user task read, assign, unassign and complete on `lib-screening-review` and `pay-instant-exception` (process start later); also the audience staff tokens carry |
+| `bpo-staff-web` | public, authorization code with PKCE (S256), DPoP-bound tokens required | the staff web (`ui/bpo-staff-web`) | scope that adds `svc-bpo-process` to `aud`; `preferred_username` and a `groups` claim with the queue groups below; redirect URI of the staff web host |
 
 Provider audiences for `svc-bpo-worker-onboarding` (the existing client ids, so no new audience is created):
 
@@ -22,6 +23,13 @@ Provider audiences for `svc-bpo-worker-onboarding` (the existing client ids, so 
 | acc | `svc-acc-accounts-ledger` | openApplicationAccount, rejectAccountApplication | caller allow-list (`azp`) entry needed |
 | psg-tr | none yet | offerKolayAdresAlias | no client exists; created with the gateway |
 | ntf | none yet | sendNotification | no client exists; created with the service |
+
+Separation of duties for staff (requested): no account holds a maker queue group and its checker queue group
+of the same process at once (`cmp-*-onboarding-l1` or `cmp-review-l1` with `cmp-*-mlro`,
+`cmp-tr-compliance-officer` or `cmp-review-l2`; `pay-tr-fast-ops` or `pay-ops-l1` with `pay-tr-fast-supervisor`
+or `pay-ops-l2`), and `preferred_username` cannot be changed by the user. `bpo-process-api` refuses the checker
+task to whoever is the maker task's last recorded assignee, but the engine keeps no earlier assignees, so someone
+who released the maker task before it ended is only stopped by this rule.
 
 Groups for user tasks, from `cmp-review-routing`: `cmp-ae-onboarding-l1`, `cmp-ae-mlro`,
 `cmp-tr-onboarding-l1`, `cmp-tr-compliance-officer`, `cmp-review-l1`, `cmp-review-l2`.

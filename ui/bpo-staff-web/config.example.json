@@ -1,0 +1,14 @@
+{
+  "apiBaseUrl": "https://bpo-process-api.example.invalid/",
+  "referenceViews": {
+    "caseId": "https://staff.example.invalid/compliance/cases/{reference}",
+    "paymentId": "https://staff.example.invalid/payments/operations/{reference}"
+  },
+  "oidc": {
+    "authorizationEndpoint": "https://keycloak.example.invalid/realms/staff/protocol/openid-connect/auth",
+    "tokenEndpoint": "https://keycloak.example.invalid/realms/staff/protocol/openid-connect/token",
+    "clientId": "bpo-staff-web",
+    "redirectUri": "https://bpo-staff.example.invalid/",
+    "scope": "openid aud-svc-bpo-process"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "bpo-staff-web",
+  "private": true,
+  "description": "Staff web for bpo user tasks: one screen set per human actor, over bpo-process-api with DPoP",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

@@ -13,5 +13,8 @@ lint/node_modules/
 deploy/camunda-platform/.chart/
 deploy/camunda-platform/rendered-*.yaml
 
+# Staff web settings of a deployment (copied from config.example.json)
+ui/bpo-staff-web/config.json
+
 # Camunda Process Test coverage report
 **/target/
