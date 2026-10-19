@@ -114,9 +114,9 @@ async function showDetail(api, config, key) {
       const released = await guarded(() => api.release(state.actor, key).then(() => true));
       showList(api, config, released ? 'status.released' : undefined);
     },
-    onDecide: async (decision) => {
+    onDecide: async (decision, reason) => {
       try {
-        await api.decide(state.actor, key, decision);
+        await api.decide(state.actor, key, decision, reason);
       } catch (e) {
         if (codeOf(e) === 'OUTCOME_UNKNOWN') return afterUnknownOutcome(api, config, key);
         return failed(e);

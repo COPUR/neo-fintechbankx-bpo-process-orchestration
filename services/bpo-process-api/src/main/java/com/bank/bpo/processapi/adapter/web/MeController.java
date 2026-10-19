@@ -8,7 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Who the staff web is talking to: the user name and the actors whose screens it should offer. */
+/** Who the staff web is talking to: a display name to greet and the actors whose screens it should offer. */
 @RestController
 public class MeController {
 
@@ -23,7 +23,7 @@ public class MeController {
     @GetMapping("/api/v1/me")
     public Me me(Authentication authentication) {
         StaffUser user = users.from(authentication);
-        return new Me(user.id(), inbox.actorsOf(user).stream().map(Actor::id).toList());
+        return new Me(users.displayName(authentication).orElse(null), inbox.actorsOf(user).stream().map(Actor::id).toList());
     }
 
     public record Me(String user, List<String> actors) {

@@ -114,9 +114,9 @@ class TaskInboxTest {
     void aDecisionWritesTheDecisionVariableAndNothingElse() {
         inbox.claim(Actor.COMPLIANCE_ANALYST, ANALYST, 1);
 
-        inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "ESCALATE"));
+        inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "ESCALATE", "reason", "OTHER"));
 
-        assertThat(engine.completions.get(1L)).containsExactly(Map.entry("reviewDecision", "ESCALATE"));
+        assertThat(engine.completions.get(1L)).containsOnly(Map.entry("reviewDecision", "ESCALATE"), Map.entry("decisionReason", "OTHER"));
     }
 
     @Test
@@ -129,16 +129,21 @@ class TaskInboxTest {
         assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, withId), Reason.BODY_NOT_ALLOWED);
         assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("reviewDecision", "CLEAR")), Reason.BODY_NOT_ALLOWED);
         assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", 1)), Reason.BODY_NOT_ALLOWED);
+        // U4: the reason is required, a code from the human list, never free text or a system-only code.
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR")), Reason.BODY_NOT_ALLOWED);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR", "reason", 7)), Reason.BODY_NOT_ALLOWED);
         assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of()), Reason.BODY_NOT_ALLOWED);
         assertThat(engine.completions).isEmpty();
     }
 
     @Test
     void aDecisionNeedsTheClaimAndAValueTheFormOffers() {
-        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR")), Reason.TASK_NOT_ASSIGNED_TO_YOU);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR", "reason", "OTHER")), Reason.TASK_NOT_ASSIGNED_TO_YOU);
         inbox.claim(Actor.COMPLIANCE_ANALYST, ANALYST, 1);
-        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "EXPIRED")), Reason.DECISION_NOT_ALLOWED);
-        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "clear")), Reason.DECISION_NOT_ALLOWED);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "EXPIRED", "reason", "OTHER")), Reason.DECISION_NOT_ALLOWED);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "clear", "reason", "OTHER")), Reason.DECISION_NOT_ALLOWED);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR", "reason", "SLA_EXPIRED")), Reason.REASON_NOT_ALLOWED);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR", "reason", "customer called")), Reason.REASON_NOT_ALLOWED);
         assertThat(engine.completions).isEmpty();
     }
 
@@ -146,14 +151,14 @@ class TaskInboxTest {
     void theSeniorCannotEscalateAgain() {
         inbox.claim(Actor.COMPLIANCE_SENIOR, OFFICER, 3);
 
-        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_SENIOR, OFFICER, 3, Map.of("decision", "ESCALATE")), Reason.DECISION_NOT_ALLOWED);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_SENIOR, OFFICER, 3, Map.of("decision", "ESCALATE", "reason", "OTHER")), Reason.DECISION_NOT_ALLOWED);
     }
 
     @Test
     void whoEscalatedACaseCannotDecideItAsSenior() {
         engine.add(10, LIB, "Task_AnalystReview", null, 900, "cmp-tr-onboarding-l1");
         inbox.claim(Actor.COMPLIANCE_ANALYST, BOTH, 10);
-        inbox.decide(Actor.COMPLIANCE_ANALYST, BOTH, 10, Map.of("decision", "ESCALATE"));
+        inbox.decide(Actor.COMPLIANCE_ANALYST, BOTH, 10, Map.of("decision", "ESCALATE", "reason", "OTHER"));
         engine.add(11, LIB, "Task_SeniorReview", null, 900, "cmp-tr-compliance-officer");
 
         assertThat(inbox.read(Actor.COMPLIANCE_SENIOR, BOTH, 11).fourEyesBlocked()).isTrue();
@@ -161,8 +166,8 @@ class TaskInboxTest {
         assertThat(engine.find(11).orElseThrow().assignee()).isNull();
 
         assertThat(inbox.claim(Actor.COMPLIANCE_SENIOR, OFFICER, 11).fourEyesBlocked()).isFalse();
-        inbox.decide(Actor.COMPLIANCE_SENIOR, OFFICER, 11, Map.of("decision", "CLEAR"));
-        assertThat(engine.completions.get(11L)).containsExactly(Map.entry("reviewDecision", "CLEAR"));
+        inbox.decide(Actor.COMPLIANCE_SENIOR, OFFICER, 11, Map.of("decision", "CLEAR", "reason", "OTHER"));
+        assertThat(engine.completions.get(11L)).containsOnly(Map.entry("reviewDecision", "CLEAR"), Map.entry("decisionReason", "OTHER"));
     }
 
     @Test
@@ -176,7 +181,7 @@ class TaskInboxTest {
         assertThat(inbox.read(Actor.COMPLIANCE_SENIOR, BOTH, 31).fourEyesBlocked()).isTrue();
         assertThat(inbox.list(Actor.COMPLIANCE_SENIOR, BOTH)).allMatch(v -> !v.fourEyesBlocked());
 
-        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_SENIOR, BOTH, 31, Map.of("decision", "CLEAR")), Reason.FOUR_EYES_REQUIRED);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_SENIOR, BOTH, 31, Map.of("decision", "CLEAR", "reason", "OTHER")), Reason.FOUR_EYES_REQUIRED);
         assertThat(engine.completions).doesNotContainKey(31L);
     }
 
@@ -196,7 +201,7 @@ class TaskInboxTest {
 
         measured.claim(Actor.COMPLIANCE_ANALYST, ANALYST, 1);
         assertThatThrownBy(() -> measured.claim(Actor.COMPLIANCE_ANALYST, OTHER_ANALYST, 1)).isInstanceOf(TaskRefusal.class);
-        measured.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR"));
+        measured.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR", "reason", "OTHER"));
 
         // Task 1 was created 10:00:01 and due 13:59:59 (FakeUserTasks), decided at 15:00.
         assertThat(seen).containsExactly(
@@ -209,9 +214,9 @@ class TaskInboxTest {
     void aSeniorTaskAfterAnExpiredAnalystSlaHasNoMakerAndCanBeDecided() {
         inbox.claim(Actor.COMPLIANCE_SENIOR, BOTH, 3);
 
-        inbox.decide(Actor.COMPLIANCE_SENIOR, BOTH, 3, Map.of("decision", "REJECT"));
+        inbox.decide(Actor.COMPLIANCE_SENIOR, BOTH, 3, Map.of("decision", "REJECT", "reason", "OTHER"));
 
-        assertThat(engine.completions.get(3L)).containsExactly(Map.entry("reviewDecision", "REJECT"));
+        assertThat(engine.completions.get(3L)).containsOnly(Map.entry("reviewDecision", "REJECT"), Map.entry("decisionReason", "OTHER"));
     }
 
     @Test
@@ -224,18 +229,18 @@ class TaskInboxTest {
         assertThat(inbox.read(Actor.PAYMENTS_OPERATIONS, ops, 20).reference()).isEqualTo("PAY-1");
         assertRefused(() -> inbox.read(Actor.COMPLIANCE_ANALYST, ANALYST, 20), Reason.TASK_NOT_FOUND);
         inbox.claim(Actor.PAYMENTS_OPERATIONS, ops, 20);
-        assertRefused(() -> inbox.decide(Actor.PAYMENTS_OPERATIONS, ops, 20, Map.of("decision", "CLEAR")), Reason.DECISION_NOT_ALLOWED);
+        assertRefused(() -> inbox.decide(Actor.PAYMENTS_OPERATIONS, ops, 20, Map.of("decision", "CLEAR", "reason", "OTHER")), Reason.DECISION_NOT_ALLOWED);
         assertRefused(() -> inbox.decide(Actor.PAYMENTS_OPERATIONS, ops, 20,
             new LinkedHashMap<>(Map.of("decision", "SETTLED", "paymentId", "PAY-OTHER"))), Reason.BODY_NOT_ALLOWED);
-        inbox.decide(Actor.PAYMENTS_OPERATIONS, ops, 20, Map.of("decision", "ESCALATE"));
-        assertThat(engine.completions.get(20L)).containsExactly(Map.entry("exceptionDecision", "ESCALATE"));
+        inbox.decide(Actor.PAYMENTS_OPERATIONS, ops, 20, Map.of("decision", "ESCALATE", "reason", "OTHER"));
+        assertThat(engine.completions.get(20L)).containsOnly(Map.entry("exceptionDecision", "ESCALATE"), Map.entry("decisionReason", "OTHER"));
 
         engine.add(21, "pay-instant-exception", "Task_SupervisorReview", null, 2000, "pay-tr-fast-supervisor");
         assertRefused(() -> inbox.claim(Actor.PAYMENTS_SUPERVISOR, ops, 21), Reason.FOUR_EYES_REQUIRED);
         inbox.claim(Actor.PAYMENTS_SUPERVISOR, supervisor, 21);
-        assertRefused(() -> inbox.decide(Actor.PAYMENTS_SUPERVISOR, supervisor, 21, Map.of("decision", "ESCALATE")), Reason.DECISION_NOT_ALLOWED);
-        inbox.decide(Actor.PAYMENTS_SUPERVISOR, supervisor, 21, Map.of("decision", "SETTLED"));
-        assertThat(engine.completions.get(21L)).containsExactly(Map.entry("exceptionDecision", "SETTLED"));
+        assertRefused(() -> inbox.decide(Actor.PAYMENTS_SUPERVISOR, supervisor, 21, Map.of("decision", "ESCALATE", "reason", "OTHER")), Reason.DECISION_NOT_ALLOWED);
+        inbox.decide(Actor.PAYMENTS_SUPERVISOR, supervisor, 21, Map.of("decision", "SETTLED", "reason", "OTHER"));
+        assertThat(engine.completions.get(21L)).containsOnly(Map.entry("exceptionDecision", "SETTLED"), Map.entry("decisionReason", "OTHER"));
     }
 
     @Test
@@ -243,7 +248,7 @@ class TaskInboxTest {
         engine.down = true;
 
         assertRefused(() -> inbox.list(Actor.COMPLIANCE_ANALYST, ANALYST), Reason.ENGINE_UNAVAILABLE);
-        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR")), Reason.ENGINE_UNAVAILABLE);
+        assertRefused(() -> inbox.decide(Actor.COMPLIANCE_ANALYST, ANALYST, 1, Map.of("decision", "CLEAR", "reason", "OTHER")), Reason.ENGINE_UNAVAILABLE);
     }
 
     private static void assertRefused(Runnable call, Reason reason) {

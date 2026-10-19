@@ -4,6 +4,7 @@ import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.BODY_NOT_ALLOWED
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.DECISION_NOT_ALLOWED;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.FOUR_EYES_REQUIRED;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.NOT_YOUR_ACTOR;
+import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.REASON_NOT_ALLOWED;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_CLAIMED_BY_OTHER;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_NOT_ASSIGNED_TO_YOU;
 import static com.bank.bpo.processapi.domain.TaskRefusal.Reason.TASK_NOT_FOUND;
@@ -32,7 +33,8 @@ import java.util.regex.Pattern;
  * The task use cases of every actor: list, read, claim, release and decide. Every operation re-reads the task
  * from the engine and checks, in this order: the user acts as the actor, the task is open, of a kind this actor
  * works and in one of the user's queues. Anything else is TASK_NOT_FOUND, so a key outside the user's queues
- * reveals nothing. A decision writes one variable, the task type's decision variable, and nothing else.
+ * reveals nothing. A decision writes two variables, the task type's decision and its coded reason, and nothing
+ * else.
  * Claims, releases, decisions and refusals are reported to {@link TaskEvents} for the screens' measures.
  */
 public final class TaskInbox {
@@ -104,6 +106,13 @@ public final class TaskInbox {
                 }
                 tasks.assign(taskKey, user.id());
                 events.claimed(actor, v.type.elementId());
+                try {
+                    return readChecked(actor, user, taskKey);
+                } catch (TaskRefusal readFailed) {
+                    // The claim went through; only the read after it failed. Answer with what is known instead of
+                    // a refusal that would read as "nothing recorded"; the screen reads the task again anyway.
+                    return view(v.task, v.type, null, false, TaskView.Assignment.MINE);
+                }
             } else if (!user.id().equals(v.task.assignee())) {
                 throw new TaskRefusal(TASK_CLAIMED_BY_OTHER);
             }
@@ -124,12 +133,14 @@ public final class TaskInbox {
     }
 
     /**
-     * Records the user's decision. {@code body} is the request body as sent; it must hold the field
-     * {@code decision} and nothing else, so no caller can write an id or any other variable.
+     * Records the user's decision. {@code body} is the request body as sent; it must hold the fields
+     * {@code decision} and {@code reason} and nothing else, so no caller can write an id, free text or any other
+     * variable. The reason is a code from the task type's human list (U4).
      */
     public void decide(Actor actor, StaffUser user, long taskKey, Map<String, ?> body) {
         reported(actor, () -> {
-            if (body == null || body.size() != 1 || !(body.get("decision") instanceof String decision)) {
+            if (body == null || body.size() != 2 || !(body.get("decision") instanceof String decision)
+                || !(body.get("reason") instanceof String reason)) {
                 throw new TaskRefusal(BODY_NOT_ALLOWED);
             }
             Visible v = visibleOrRefuse(actor, user, taskKey);
@@ -139,11 +150,15 @@ public final class TaskInbox {
             if (!v.type.allows(decision)) {
                 throw new TaskRefusal(DECISION_NOT_ALLOWED);
             }
-            // Four eyes: whoever held the maker task, completed or let it expire, cannot decide the checker task.
+            if (!v.type.allowsReason(reason)) {
+                throw new TaskRefusal(REASON_NOT_ALLOWED);
+            }
+            // Four eyes: the maker task's last assignee, whether it completed or expired, cannot decide the checker
+            // task. The engine keeps no earlier assignees; the identity separation-of-duties rule covers those.
             if (heldMaker(v, user)) {
                 throw new TaskRefusal(FOUR_EYES_REQUIRED);
             }
-            tasks.complete(taskKey, Map.of(v.type.decisionVariable(), decision));
+            tasks.complete(taskKey, Map.of(v.type.decisionVariable(), decision, v.type.reasonVariable(), reason));
             Instant now = clock.instant();
             events.decided(actor, v.type.elementId(), decision,
                 v.task.creationDate() == null ? null : Duration.between(v.task.creationDate(), now),
@@ -197,9 +212,14 @@ public final class TaskInbox {
                                  boolean fourEyesBlocked) {
         TaskView.Assignment assignment = task.assignee() == null ? TaskView.Assignment.UNASSIGNED
             : user.id().equals(task.assignee()) ? TaskView.Assignment.MINE : TaskView.Assignment.OTHER;
+        return view(task, type, reference, fourEyesBlocked, assignment);
+    }
+
+    private static TaskView view(EngineTask task, TaskType type, String reference, boolean fourEyesBlocked,
+                                 TaskView.Assignment assignment) {
         return new TaskView(task.key(), type.actor(), type.elementId(), type.processDefinitionId(), assignment,
             task.creationDate(), task.dueDate(), type.maker().isPresent(), type.decisions(),
-            type.referenceVariable(), reference, fourEyesBlocked);
+            type.reasons(), type.referenceVariable(), reference, fourEyesBlocked);
     }
 
     private record Visible(EngineTask task, TaskType type) {

@@ -33,7 +33,7 @@ public class TaskProblems {
             case NOT_YOUR_ACTOR -> HttpStatus.FORBIDDEN;
             case TASK_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case TASK_CLAIMED_BY_OTHER, TASK_NOT_ASSIGNED_TO_YOU, FOUR_EYES_REQUIRED -> HttpStatus.CONFLICT;
-            case DECISION_NOT_ALLOWED -> HttpStatus.UNPROCESSABLE_CONTENT;
+            case DECISION_NOT_ALLOWED, REASON_NOT_ALLOWED -> HttpStatus.UNPROCESSABLE_CONTENT;
             case BODY_NOT_ALLOWED -> HttpStatus.BAD_REQUEST;
             case ENGINE_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case OUTCOME_UNKNOWN -> HttpStatus.GATEWAY_TIMEOUT;

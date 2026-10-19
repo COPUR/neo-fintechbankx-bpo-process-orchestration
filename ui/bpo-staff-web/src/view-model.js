@@ -75,6 +75,13 @@ export function decisionOptions(task, lang) {
     .filter((o) => o.label !== null);
 }
 
+/** The reason codes to offer (U4): those the server lists for this task that the UI has a label for. */
+export function reasonOptions(task, lang) {
+  return (task.reasons ?? [])
+    .map((r) => ({ value: r, label: label(lang, `reason.${r}`) }))
+    .filter((o) => o.label !== null);
+}
+
 /**
  * What the detail screen lets the user do now. A decision is offered only on a task the user holds, with a
  * readable reference, and that four eyes does not keep from the user. A task four eyes keeps from the user

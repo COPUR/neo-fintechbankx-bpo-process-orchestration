@@ -51,7 +51,8 @@ public class ApplicationConfiguration {
 
     @Bean
     StaffUsers staffUsers(ProcessApiProperties properties) {
-        return new StaffUsers(properties.token().userClaim(), properties.token().groupsClaim());
+        ProcessApiProperties.Token token = properties.token();
+        return new StaffUsers(token.userClaim(), token.displayClaim(), token.groupsClaim(), token.groupPrefix());
     }
 
     /** Every actor needs at least one queue group, and no group may serve two actors. */

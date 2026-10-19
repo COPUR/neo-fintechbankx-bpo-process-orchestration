@@ -4,7 +4,7 @@
 
 import { el, clear } from './dom.js';
 import { t, formatDateTime } from './i18n.js';
-import { FILTERS, decisionOptions, detailState, filterCounts, filterTasks, referenceLink, taskRows } from './view-model.js';
+import { FILTERS, decisionOptions, detailState, filterCounts, filterTasks, reasonOptions, referenceLink, taskRows } from './view-model.js';
 
 function heading(text) {
   const h = el('h2', { tabindex: '-1', id: 'screen-heading' }, text);
@@ -138,9 +138,17 @@ export function renderDetail(main, { lang, actor, task, referenceViews, onBack, 
       el('input', { type: 'radio', name: 'decision', id, value: option.value, required: true }),
       el('label', { for: id }, option.label)));
   }
+  // U4: a coded reason is required with every decision; codes only, no free text, so no personal data is sent.
+  const reasons = el('fieldset', {}, el('legend', {}, t(lang, 'reason.legend')));
+  for (const option of reasonOptions(task, lang)) {
+    const id = `reason-${option.value}`;
+    reasons.append(el('span', { class: 'choice' },
+      el('input', { type: 'radio', name: 'reason', id, value: option.value, required: true }),
+      el('label', { for: id }, option.label)));
+  }
   const confirmBox = el('div', { class: 'confirm', hidden: true, role: 'alertdialog', 'aria-labelledby': 'confirm-text' });
   const submit = el('button', { type: 'submit' }, t(lang, 'action.submit'));
-  form.append(group, el('div', { class: 'buttons' }, submit, release), confirmBox);
+  form.append(group, reasons, el('div', { class: 'buttons' }, submit, release), confirmBox);
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -149,15 +157,20 @@ export function renderDetail(main, { lang, actor, task, referenceViews, onBack, 
       group.querySelector('input')?.focus();
       return;
     }
+    const reason = form.querySelector('input[name="reason"]:checked');
+    if (!reason) {
+      reasons.querySelector('input')?.focus();
+      return;
+    }
     const option = decisionOptions(task, lang).find((o) => o.value === chosen.value);
     if (!option?.confirm) {
-      onDecide(chosen.value);
+      onDecide(chosen.value, reason.value);
       return;
     }
     clear(confirmBox);
     const yes = el('button', { type: 'button' }, option.confirmLabel);
     const no = el('button', { type: 'button', class: 'secondary' }, t(lang, 'action.cancel'));
-    yes.addEventListener('click', () => onDecide(chosen.value));
+    yes.addEventListener('click', () => onDecide(chosen.value, reason.value));
     no.addEventListener('click', () => { confirmBox.hidden = true; submit.focus(); });
     confirmBox.append(el('p', { id: 'confirm-text' }, option.confirm), yes, no);
     confirmBox.hidden = false;

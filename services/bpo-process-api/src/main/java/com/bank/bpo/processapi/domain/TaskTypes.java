@@ -10,21 +10,25 @@ import java.util.Optional;
  */
 public final class TaskTypes {
 
+    /** models/dictionary/variables.yaml, decisionReason: the codes offered to people (U4). */
+    static final String REASON = "decisionReason";
+    static final List<String> HUMAN_REASONS = List.of("OTHER");
+
     public static final TaskType SCREENING_ANALYST_REVIEW = new TaskType(Actor.COMPLIANCE_ANALYST,
         "lib-screening-review", "Task_AnalystReview", "reviewDecision", List.of("CLEAR", "REJECT", "ESCALATE"),
-        null, "caseId");
+        REASON, HUMAN_REASONS, null, "caseId");
 
     public static final TaskType SCREENING_SENIOR_REVIEW = new TaskType(Actor.COMPLIANCE_SENIOR,
         "lib-screening-review", "Task_SeniorReview", "reviewDecision", List.of("CLEAR", "REJECT"),
-        "Task_AnalystReview", "caseId");
+        REASON, HUMAN_REASONS, "Task_AnalystReview", "caseId");
 
     public static final TaskType PAYMENT_EXCEPTION_OPS_REVIEW = new TaskType(Actor.PAYMENTS_OPERATIONS,
         "pay-instant-exception", "Task_OpsReview", "exceptionDecision", List.of("SETTLED", "REJECTED", "ESCALATE"),
-        null, "paymentId");
+        REASON, HUMAN_REASONS, null, "paymentId");
 
     public static final TaskType PAYMENT_EXCEPTION_SUPERVISOR_REVIEW = new TaskType(Actor.PAYMENTS_SUPERVISOR,
         "pay-instant-exception", "Task_SupervisorReview", "exceptionDecision", List.of("SETTLED", "REJECTED", "UNRESOLVED"),
-        "Task_OpsReview", "paymentId");
+        REASON, HUMAN_REASONS, "Task_OpsReview", "paymentId");
 
     private static final List<TaskType> ALL = List.of(SCREENING_ANALYST_REVIEW, SCREENING_SENIOR_REVIEW,
         PAYMENT_EXCEPTION_OPS_REVIEW, PAYMENT_EXCEPTION_SUPERVISOR_REVIEW);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { caseLink, decisionOptions, referenceLink, detailState, errorMessage, filterCounts, filterTasks, newTaskCount, slaState, taskRows, unknownOutcomeMessage } from '../src/view-model.js';
+import { caseLink, decisionOptions, referenceLink, detailState, errorMessage, filterCounts, filterTasks, newTaskCount, reasonOptions, slaState, taskRows, unknownOutcomeMessage } from '../src/view-model.js';
 
 const NOW = Date.parse('2026-10-18T12:00:00Z');
 const task = (key, assignment, dueAt, taskType = 'Task_AnalystReview') => ({ taskKey: key, assignment, dueAt, taskType });
@@ -101,4 +101,9 @@ test('the case link only carries a plain id into an https template', () => {
 test('unknown refusal codes fall back to a generic message', () => {
   assert.match(errorMessage('tr', 'FOUR_EYES_REQUIRED'), /başka bir yetkili/);
   assert.equal(errorMessage('en', 'SOMETHING'), errorMessage('en', 'UNKNOWN'));
+});
+
+test('reasons follow the server and only labelled codes are offered', () => {
+  assert.deepEqual(reasonOptions({ reasons: ['OTHER', 'SLA_EXPIRED'] }, 'tr'), [{ value: 'OTHER', label: 'Diğer' }]);
+  assert.deepEqual(reasonOptions({}, 'en'), []);
 });

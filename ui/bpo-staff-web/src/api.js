@@ -1,6 +1,6 @@
 // Client of bpo-process-api. Every call carries "Authorization: DPoP <token>" and a fresh proof. The only body
-// the client ever sends is {"decision": "..."}: ids come from the URL the server listed, never from a form,
-// and the server refuses any other field (BODY_NOT_ALLOWED).
+// the client ever sends is {"decision": "...", "reason": "..."}, both codes the server listed: ids come from the
+// URL the server listed, never from a form, and the server refuses any other field (BODY_NOT_ALLOWED).
 
 import { createProof } from './dpop.js';
 
@@ -66,9 +66,10 @@ export function createApi({ baseUrl, key, accessToken, fetchImpl = globalThis.fe
     read: (actor, taskKey) => call('GET', taskPath(actor, taskKey)),
     claim: (actor, taskKey) => call('POST', taskPath(actor, taskKey, '/claim')),
     release: (actor, taskKey) => call('POST', taskPath(actor, taskKey, '/release')),
-    decide: (actor, taskKey, decision) => {
+    decide: (actor, taskKey, decision, reason) => {
       if (typeof decision !== 'string') throw new ApiError(0, 'DECISION_NOT_ALLOWED');
-      return call('POST', taskPath(actor, taskKey, '/decision'), { decision });
+      if (typeof reason !== 'string') throw new ApiError(0, 'REASON_NOT_ALLOWED');
+      return call('POST', taskPath(actor, taskKey, '/decision'), { decision, reason });
     },
   };
 }
