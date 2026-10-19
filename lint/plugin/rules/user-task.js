@@ -1,7 +1,8 @@
 'use strict';
 // A user task is a Camunda user task (zeebe:userTask, 05 §6.2) with a candidate group (07 §1.4). It names its
 // outputs: without an output mapping every field the completing user sends merges into the process scope, so a
-// crafted completion could overwrite a business key such as paymentId.
+// crafted completion could overwrite a business key such as paymentId. Every decision carries a coded reason
+// (U4), so the mapping always includes decisionReason.
 const { is } = require('bpmnlint-utils');
 const { extension } = require('../lib/model');
 
@@ -21,6 +22,8 @@ module.exports = function () {
     const io = extension(node, 'zeebe:IoMapping');
     if (!io || !(io.outputParameters || []).length) {
       reporter.report(node.id, 'User task has no output mapping; completion variables would overwrite process variables');
+    } else if (!io.outputParameters.some((p) => p.target === 'decisionReason')) {
+      reporter.report(node.id, 'User task does not map decisionReason; every decision carries a coded reason');
     }
   }
   return { check };

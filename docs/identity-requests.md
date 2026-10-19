@@ -48,9 +48,9 @@ Provider audiences for `svc-bpo-worker-payments` (P2, `docs/packages/tr-fast.md`
 
 | Provider | Audience | Operations (contracts/expectations) | `azp` to allow |
 |---|---|---|---|
-| pay | `svc-pay-initiation-settlement` | recordExceptionDecision, markExceptionSettled, markExceptionRejected | `svc-bpo-worker-payments` |
+| pay | `svc-pay-initiation-settlement` | recordExceptionDecision, markExceptionSettled, markExceptionRejected, applyFastReturn, closeRecallCase | `svc-bpo-worker-payments` |
 | acc | `svc-acc-accounts-ledger` | captureHold, releaseHold | `svc-bpo-worker-payments` |
-| psg-tr | none yet (`svc-psg-tr` with the gateway) | getFastInstructionStatus | `svc-bpo-worker-payments` |
+| psg-tr | none yet (`svc-psg-tr` with the gateway) | getFastInstructionStatus, sendFastRecallRequest, getFastRecallStatus | `svc-bpo-worker-payments` |
 | ntf | none yet | sendNotification | `svc-bpo-worker-payments` |
 
 Groups for user tasks, from `pay-exception-routing`: `pay-tr-fast-ops`, `pay-tr-fast-supervisor`, `pay-ops-l1`,

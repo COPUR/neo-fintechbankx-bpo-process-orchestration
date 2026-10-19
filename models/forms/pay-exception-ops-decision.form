@@ -19,6 +19,16 @@
         { "label": "Rejected at the scheme", "value": "REJECTED" },
         { "label": "Escalate to the supervisor", "value": "ESCALATE" }
       ]
+    },
+    {
+      "type": "radio",
+      "id": "Field_DecisionReason",
+      "key": "decisionReason",
+      "label": "Reason",
+      "validate": { "required": true },
+      "values": [
+        { "label": "Other", "value": "OTHER" }
+      ]
     }
   ]
 }

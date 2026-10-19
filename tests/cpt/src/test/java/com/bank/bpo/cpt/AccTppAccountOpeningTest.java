@@ -184,10 +184,11 @@ class AccTppAccountOpeningTest {
         assertThat(instance).isActive().hasActiveElements("Task_ScreeningReview");
         awaitReview("Task_AnalystReview");
         assertThat(UserTaskSelectors.byElementId("Task_AnalystReview")).hasCandidateGroups(java.util.List.of("cmp-ae-onboarding-l1"));
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_AnalystReview"), Map.of("reviewDecision", "CLEAR"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_AnalystReview"), Map.of("reviewDecision", "CLEAR", "decisionReason", "OTHER"));
 
         assertThat(instance).isCompleted().hasCompletedElements("Task_ScreeningReview", "Task_OpenAccount", "EndEvent_AccountOpened");
         assertThat(SIM.decisionRecordedFor("app-rev-1")).isEqualTo("CLEAR");
+        assertThat(SIM.reasonRecordedFor("app-rev-1")).isEqualTo("OTHER");
     }
 
     @Test
@@ -197,7 +198,7 @@ class AccTppAccountOpeningTest {
         ProcessInstanceEvent instance = start("app-rev-tr", "TR");
         awaitReview("Task_AnalystReview");
         assertThat(UserTaskSelectors.byElementId("Task_AnalystReview")).hasCandidateGroups(java.util.List.of("cmp-tr-onboarding-l1"));
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_AnalystReview"), Map.of("reviewDecision", "CLEAR"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_AnalystReview"), Map.of("reviewDecision", "CLEAR", "decisionReason", "OTHER"));
 
         assertThat(instance).isCompleted().hasCompletedElements("Task_OpenAccount", "Task_OfferKolayAdres", "EndEvent_AccountOpened");
     }
@@ -216,7 +217,7 @@ class AccTppAccountOpeningTest {
 
         ProcessInstanceEvent instance = start("app-rev-2", "AE");
         awaitReview("Task_AnalystReview");
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_AnalystReview"), Map.of("reviewDecision", "REJECT"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_AnalystReview"), Map.of("reviewDecision", "REJECT", "decisionReason", "OTHER"));
 
         assertThat(instance).isCompleted().hasCompletedElements("BoundaryEvent_ScreeningRejected", "Event_ScreeningRejected", "EndEvent_Rejected")
             .hasNotActivatedElements("Task_OpenAccount");
@@ -229,9 +230,9 @@ class AccTppAccountOpeningTest {
 
         ProcessInstanceEvent instance = start("app-rev-3", "AE");
         awaitReview("Task_AnalystReview");
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_AnalystReview"), Map.of("reviewDecision", "ESCALATE"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_AnalystReview"), Map.of("reviewDecision", "ESCALATE", "decisionReason", "OTHER"));
         awaitReview("Task_SeniorReview");
-        context.completeUserTask(UserTaskSelectors.byElementId("Task_SeniorReview"), Map.of("reviewDecision", "CLEAR"));
+        context.completeUserTask(UserTaskSelectors.byElementId("Task_SeniorReview"), Map.of("reviewDecision", "CLEAR", "decisionReason", "OTHER"));
 
         assertThat(ProcessInstanceSelectors.byProcessId("lib-screening-review")).isCompleted().hasCompletedElements("Task_SeniorReview", "EndEvent_Cleared");
         assertThat(instance).isCompleted().hasCompletedElements("Task_OpenAccount", "EndEvent_AccountOpened");
@@ -255,6 +256,7 @@ class AccTppAccountOpeningTest {
         assertThat(instance).isCompleted().hasCompletedElements("Event_ScreeningRejected", "EndEvent_Rejected")
             .hasNotActivatedElements("Task_OpenAccount");
         assertThat(SIM.decisionRecordedFor("app-rev-4")).isEqualTo("EXPIRED");
+        assertThat(SIM.reasonRecordedFor("app-rev-4")).isEqualTo("SLA_EXPIRED");
         assertThat(SIM.accountsOpened()).isZero();
     }
 

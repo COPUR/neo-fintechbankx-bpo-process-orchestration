@@ -9,7 +9,7 @@ import java.util.Set;
 /** ntf POST /api/v1/notifications (contracts/expectations/ntf.yaml): the payment and the purpose, never an address. */
 public final class NtfNotificationAdapter implements NotificationPort {
 
-    private static final Set<String> PURPOSES = Set.of("PAYMENT_SETTLED", "PAYMENT_REJECTED");
+    private static final Set<String> PURPOSES = Set.of("PAYMENT_SETTLED", "PAYMENT_REJECTED", "RECALL_RETURNED", "RECALL_UNRESOLVED");
     private final ProviderHttp http;
 
     public NtfNotificationAdapter(ProviderHttp http) {

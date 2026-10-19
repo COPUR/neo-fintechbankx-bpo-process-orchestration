@@ -32,7 +32,8 @@ class JobTypeContractTest {
     private static List<Method> jobWorkerMethods() throws Exception {
         List<Method> methods = new ArrayList<>();
         for (String name : new String[] {"StatusInquiryWorker", "CaptureHoldWorker", "ReleaseHoldWorker", "RecordExceptionDecisionWorker",
-            "MarkSettledWorker", "MarkRejectedWorker", "NotifyPaymentWorker"}) {
+            "MarkSettledWorker", "MarkRejectedWorker", "NotifyPaymentWorker", "SendRecallRequestWorker", "RecallStatusWorker",
+            "ApplyReturnWorker", "CloseRecallWorker"}) {
             Class<?> type = Class.forName("com.bank.bpo.payments.handler." + name);
             List<Method> annotated = Arrays.stream(type.getDeclaredMethods()).filter((m) -> m.isAnnotationPresent(JobWorker.class)).toList();
             assertThat(annotated).as("one job type per class: " + name).hasSize(1);

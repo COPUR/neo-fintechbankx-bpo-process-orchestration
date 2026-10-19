@@ -17,7 +17,32 @@ operations:
     response: {schemeStatus: [ACSC, RJCT, PDNG]}
     readOnly: true     # never resends the instruction to FAST (05 §6.4, 08 §11.1 "no resend without a status inquiry")
     personalData: none # no IBAN, alias or name; the gateway keeps the canonical instruction
+  sendFastRecallRequest:
+    status: requested
+    method: POST
+    path: /api/v1/psg-tr/fast/instructions/{paymentId}/recall-requests
+    idempotencyKey: "<paymentId>:recall-request"
+    caller: svc-bpo-worker-payments
+    request: {}
+    response: {recallRequestRef: id}
+    note: P6. The gateway picks the channel to the receiving bank (FAST message, SİPER or bilateral; unverified, 08 §2.7) and keeps the request; sending it moves no money. 409 IDEMPOTENCY_KEY_REUSED is an incident.
+  getFastRecallStatus:
+    status: requested
+    method: GET
+    path: /api/v1/psg-tr/fast/instructions/{paymentId}/recall-status
+    caller: svc-bpo-worker-payments
+    response: {recallStatus: [RETURNED, DECLINED, PENDING]}
+    readOnly: true
+    rule: RETURNED only once the receiving bank's return has arrived as a new FAST transfer that the gateway linked to this payment (02 §3.2 SchemeReturn, never more than the original amount)
+    personalData: none
 events:
+  RecallAnswered:
+    status: requested
+    topic: evt.psg.tr.v1
+    eventType: PaymentSchemes.Recall.Answered.v1
+    key: paymentId
+    fields: {paymentId: id}
+    note: Only wakes the instance (pay-return-recall re-reads getFastRecallStatus); the bridge publishes Msg_RecallAnswered with correlation key paymentId.
   SchemeStatusReported:
     status: requested
     topic: evt.psg.tr.v1

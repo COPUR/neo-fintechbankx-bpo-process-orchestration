@@ -82,9 +82,12 @@ test('user-task: job-worker user task, no candidate group, candidate users', asy
   assert.ok(messages.some((m) => /not a Camunda user task/.test(m)), messages.join());
   assert.ok(messages.some((m) => /no candidate group/.test(m)), messages.join());
   assert.ok(messages.some((m) => /candidate users/.test(m)), messages.join());
-  const mapped = '<zeebe:ioMapping><zeebe:output source="=decision" target="decision" /></zeebe:ioMapping>';
+  const mapped = '<zeebe:ioMapping><zeebe:output source="=decision" target="decision" /><zeebe:output source="=decisionReason" target="decisionReason" /></zeebe:ioMapping>';
+  const noReason = '<zeebe:ioMapping><zeebe:output source="=decision" target="decision" /></zeebe:ioMapping>';
   const unmapped = await fbx(model(userTask('<zeebe:userTask /><zeebe:assignmentDefinition candidateGroups="cmp-review-l1" />')), 'user-task');
   assert.ok(unmapped.some((m) => /no output mapping/.test(m)), unmapped.join());
+  const reasonless = await fbx(model(userTask(`<zeebe:userTask />${noReason}<zeebe:assignmentDefinition candidateGroups="cmp-review-l1" />`)), 'user-task');
+  assert.ok(reasonless.some((m) => /does not map decisionReason/.test(m)), reasonless.join());
   assert.deepStrictEqual(await fbx(model(userTask(`<zeebe:userTask />${mapped}<zeebe:assignmentDefinition candidateGroups="cmp-review-l1" />`)), 'user-task'), []);
 });
 

@@ -19,6 +19,16 @@
         { "label": "Reject", "value": "REJECT" },
         { "label": "Escalate to senior review", "value": "ESCALATE" }
       ]
+    },
+    {
+      "type": "radio",
+      "id": "Field_DecisionReason",
+      "key": "decisionReason",
+      "label": "Reason",
+      "validate": { "required": true },
+      "values": [
+        { "label": "Other", "value": "OTHER" }
+      ]
     }
   ]
 }

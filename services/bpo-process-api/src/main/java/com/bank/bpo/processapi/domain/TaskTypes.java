@@ -23,7 +23,7 @@ public final class TaskTypes {
         null, "paymentId");
 
     public static final TaskType PAYMENT_EXCEPTION_SUPERVISOR_REVIEW = new TaskType(Actor.PAYMENTS_SUPERVISOR,
-        "pay-instant-exception", "Task_SupervisorReview", "exceptionDecision", List.of("SETTLED", "REJECTED"),
+        "pay-instant-exception", "Task_SupervisorReview", "exceptionDecision", List.of("SETTLED", "REJECTED", "UNRESOLVED"),
         "Task_OpsReview", "paymentId");
 
     private static final List<TaskType> ALL = List.of(SCREENING_ANALYST_REVIEW, SCREENING_SENIOR_REVIEW,

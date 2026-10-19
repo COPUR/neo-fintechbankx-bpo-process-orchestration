@@ -19,14 +19,20 @@ variables:
   rejectionReason: {kind: reason-code, values: [KYC_REJECTED, KYC_TIMEOUT, SCREENING_REJECTED]}
   accountId: {kind: reference, owner: acc}
   aliasOfferStatus: {kind: enum, values: [OFFERED, NOT_ELIGIBLE]}
-  purpose: {kind: enum, values: [ACCOUNT_OPENED, ACCOUNT_APPLICATION_REJECTED, PAYMENT_SETTLED, PAYMENT_REJECTED], note: ntf template purpose}
+  purpose: {kind: enum, values: [ACCOUNT_OPENED, ACCOUNT_APPLICATION_REJECTED, PAYMENT_SETTLED, PAYMENT_REJECTED, RECALL_RETURNED, RECALL_UNRESOLVED], note: ntf template purpose}
   notificationRef: {kind: reference, owner: ntf}
-  paymentId: {kind: business-key, owner: pay, note: P2 business key; pay set the payment to EXCEPTION_OWNED_BY_BPO before the start}
+  paymentId: {kind: business-key, owner: pay, note: P2 and P6 business key; for P2 pay set the payment to EXCEPTION_OWNED_BY_BPO before the start, for P6 pay opened its recall case}
   rail: {kind: enum, values: [FAST], note: the scheme the instruction went to; AANI joins with psg-ae}
   statusPolicy: {kind: dmn-output, note: "psg-status-inquiry-policy result: firstWait, secondWait, thirdWait"}
   schemeStatus: {kind: enum, values: [ACSC, RJCT, PDNG], note: psg's record of the instruction, re-read on every wake}
   statusSignal: {kind: enum, values: [RECEIVED], note: set by Msg_SchemeStatusReported itself; the message payload is never merged}
   exceptionRouting: {kind: dmn-output, note: "pay-exception-routing result: opsQueue, opsSla, supervisorQueue, supervisorSla"}
-  exceptionDecision: {kind: enum, values: [SETTLED, REJECTED, ESCALATE, EXPIRED], note: set by the ops user tasks or the SLA expiry}
+  exceptionDecision: {kind: enum, values: [SETTLED, REJECTED, ESCALATE, UNRESOLVED, EXPIRED], note: set by the ops user tasks (UNRESOLVED by the supervisor only) or the SLA expiry}
+  decisionReason: {kind: reason-code, values: [OTHER, SLA_EXPIRED], system_only: [SLA_EXPIRED], note: coded reason a person picks with a review or exception decision (U4); humans are offered OTHER until the cmp and pay owners supply their codes; SLA_EXPIRED is set only by the SLA expiry events and never offered on a form}
   exceptionOutcome: {kind: enum, values: [SETTLE, RELEASE, HANDED_BACK], note: pay's recorded outcome; pay checks the decision against psg's record}
-  journalRef: {kind: reference, owner: acc, note: the capture journal entry}
+  journalRef: {kind: reference, owner: acc, note: the capture journal entry (P2) or the return credit (P6)}
+  recallPolicy: {kind: dmn-output, owner: pay-recall-policy, note: firstWait and finalWait durations only}
+  recallRequestRef: {kind: reference, owner: psg, note: the gateway's reference of the recall request}
+  recallStatus: {kind: enum, values: [RETURNED, DECLINED, PENDING], note: psg's record of the receiving bank's answer}
+  recallSignal: {kind: enum, values: [RECEIVED], note: set by Msg_RecallAnswered itself; the message payload is never merged}
+  recallOutcome: {kind: enum, values: [RETURNED, UNRESOLVED], note: the outcome P6 closes pay's recall case with}
